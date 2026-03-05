@@ -121,16 +121,15 @@ class MovingAverageStrategy:
 class StrategyEngine:
     """策略引擎 - 支持多种策略"""
 
-    def __init__(self, config_path: str):
-        self.config = self._load_config(config_path)
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Args:
+            config: 策略配置字典
+        """
+        self.config = config
         self.kline_cache = KLineCache()
         self.strategy = self._create_strategy(self.config)
         logger.info(f"策略引擎初始化: {self.strategy.name}")
-
-    def _load_config(self, path: str) -> Dict[str, Any]:
-        import json
-        with open(path, 'r') as f:
-            return json.load(f)
 
     def _create_strategy(self, config: Dict[str, Any]):
         """根据配置创建策略实例"""

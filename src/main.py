@@ -16,6 +16,7 @@ from src.engine.executor import OrderExecutor
 from src.engine.risk_manager import RiskManager
 from src.dashboard.app import Dashboard
 from src.notifier import NotificationManager
+from src.learning.performance_analyzer import PerformanceAnalyzer, ParameterOptimizer
 
 # 配置日志
 logging.basicConfig(
@@ -89,7 +90,7 @@ class TradingBot:
             self.db = None
 
         # 策略引擎
-        self.strategy_engine = StrategyEngine("config/strategies/ma_cross.json")
+        self.strategy_engine = StrategyEngine(self.strategy_config)
         self.strategy_engine.set_signal_callback(self.on_signal)
 
         # 执行器
@@ -123,6 +124,14 @@ class TradingBot:
         # 通知管理器（默认启用）
         self.notifier = NotificationManager("data")
         self.notifications_enabled = self.mode_config.get("notifications_enabled", True)
+
+        # 自改进学习组件（仅 local 模式可用，需要数据库）
+        self.performance_analyzer = None
+        self.parameter_optimizer = None
+        if self.db and self.mode_config.get("learning_enabled", True):
+            self.performance_analyzer = PerformanceAnalyzer(self.db.db_path)
+            self.parameter_optimizer = ParameterOptimizer(self.performance_analyzer)
+            logger.info("自改进学习已启用")
 
     async def on_kline(self, kline: dict):
         """K线回调"""
@@ -360,6 +369,35 @@ class TradingBot:
                     "balance": usdt
                 })
                 logger.info("已发送每日报告")
+
+                # 自改进学习分析（本地模式）
+                if self.performance_analyzer and self.parameter_optimizer:
+                    try:
+                        strategy_name = self.strategy_config.get("name", self.strategy_config.get("type", "ma_cross"))
+                        perf = self.performance_analyzer.get_strategy_performance(strategy_name, days=7)
+                        suggestion = self.parameter_optimizer.suggest_improvements(strategy_name, self.strategy_config)
+
+                        logger.info(f"📈 策略表现分析: {strategy_name}")
+                        logger.info(f"  评估: {perf['period_days']}天, {perf['total_trades']}笔, 胜率 {perf['win_rate']}%, 总盈亏 ${perf['total_pnl']:.2f}")
+                        logger.info(f"  建议: {'; '.join(suggestion['suggestions'])}")
+
+                        # 发送学习报告通知
+                        if perf['total_trades'] > 0:
+                            learning_report = (
+                                f"🧠 策略表现分析 - {today}\n\n"
+                                f"策略: {strategy_name}\n"
+                                f"评估: {perf['period_days']}天, {perf['total_trades']}笔交易\n"
+                                f"胜率: {perf['win_rate']}%, 总盈亏: ${perf['total_pnl']:.2f}\n"
+                                f"最大回撤: ${perf['max_drawdown']:.2f}\n"
+                                f"建议: {'; '.join(suggestion['suggestions'])}"
+                            )
+                            self.notifier.send("daily_summary", "策略学习报告", learning_report, {
+                                "strategy": strategy_name,
+                                "performance": perf,
+                                "suggestions": suggestion['suggestions']
+                            })
+                    except Exception as e:
+                        logger.error(f"策略表现分析失败: {e}")
 
     async def stop(self):
         """停止"""

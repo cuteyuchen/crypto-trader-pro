@@ -125,19 +125,31 @@ class TestCCXTBacktestEngine:
 
     def test_pagination(self):
         """测试分页逻辑（超过1000条数据）"""
-        # 创建超过 limit 的数据模拟
-        mock_ohlcv_page1 = [[1704067200000 + i*3600000, 50000.0 + i, 50100.0 + i, 49900.0 + i, 50050.0 + i, 100.0] for i in range(1000)]
-        mock_ohlcv_page2 = [[1704074400000 + i*3600000, 51000.0 + i, 51100.0 + i, 50900.0 + i, 51050.0 + i, 100.0] for i in range(100)]
+        timeframe_ms = 3600000  # 1h = 3600000 ms
+        base_time = 1704067200000
+        
+        # 创建两页数据，每页1000条
+        mock_ohlcv_page1 = [
+            [base_time + i * timeframe_ms, 50000.0 + i, 50100.0 + i, 49900.0 + i, 50050.0 + i, 100.0]
+            for i in range(1000)
+        ]
+        mock_ohlcv_page2 = [
+            [base_time + 1000 * timeframe_ms + i * timeframe_ms, 51000.0 + i, 51100.0 + i, 50900.0 + i, 51050.0 + i, 100.0]
+            for i in range(200)  # 只再获取200条，使总数1200
+        ]
 
         with patch('ccxt.binance') as MockExchange:
             mock_exchange = Mock()
-            # 第一次调用返回1000条，第二次返回100条，第三次返回空（结束）
+            # 第一次调用返回1000条，第二次返回200条，第三次返回空（结束）
             mock_exchange.fetch_ohlcv.side_effect = [mock_ohlcv_page1, mock_ohlcv_page2, []]
             mock_exchange.load_markets = Mock()
             MockExchange.return_value = mock_exchange
 
+            # 计算结束时间：覆盖第二页的所有数据
+            # 第二页最后的时间戳 + 1毫秒
+            end_timestamp = base_time + 1200 * timeframe_ms
             start = datetime(2024, 1, 1)
-            end = datetime(2024, 1, 20)  # 足够长的时间范围
+            end = datetime.fromtimestamp(end_timestamp / 1000) + timedelta(days=1)
 
             df = self.engine.fetch_historical_data(
                 exchange='binance',
@@ -148,7 +160,7 @@ class TestCCXTBacktestEngine:
                 use_cache=False
             )
 
-            assert len(df) == 1100  # 两页合计
+            assert len(df) == 1200  # 两页合计
             assert mock_exchange.fetch_ohlcv.call_count == 2  # 两次调用
 
     def test_data_sorting_and_deduplication(self):

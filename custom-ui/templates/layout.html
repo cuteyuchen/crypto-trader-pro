@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}加密货币交易机器人{% endblock %} - Crypto Trader Pro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- 移动端导航 -->
+    {% include 'mobile_navbar.html' %}
+
+    <!-- 主内容区 -->
+    <main class="mobile-page" id="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- 底部导航 (可选) -->
+    <!-- <nav class="bottom-nav">...</nav> -->
+
+    <!-- 全局加载指示器 -->
+    <div id="global-loading" class="loading-overlay" style="display:none;">
+        <div class="spinner"></div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

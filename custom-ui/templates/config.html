@@ -1,0 +1,85 @@
+{% extends "layout.html" %}
+
+{% block title %}配置{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>⚙️ 系统配置</h2>
+    <button class="btn btn-primary" id="save-config">保存并应用</button>
+</div>
+
+<div class="card">
+    <form id="config-form" class="form-grid">
+        <div class="form-group">
+            <label>交易所</label>
+            <select id="cfg-exchange">
+                <option value="okx">OKX</option>
+                <option value="binance">Binance</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>通知启用</label>
+            <select id="cfg-notify">
+                <option value="true">是</option>
+                <option value="false">否</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>自动交易</label>
+            <select id="cfg-auto">
+                <option value="true">启用</option>
+                <option value="false">禁用</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>最大同时持仓数</label>
+            <input type="number" id="cfg-max-trades" value="3" min="1" max="10">
+        </div>
+        <div class="form-group">
+            <label>初始余额 (USDT)</label>
+            <input type="number" id="cfg-initial" value="10000">
+        </div>
+    </form>
+    <div id="config-status" class="mt-20"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 加载当前配置
+    fetch('/api/config').then(r=>r.json()).then(cfg => {
+        if (cfg) {
+            document.getElementById('cfg-exchange').value = cfg.exchange || 'okx';
+            document.getElementById('cfg-notify').value = String(cfg.notifications_enabled || true);
+            document.getElementById('cfg-auto').value = String(cfg.auto_trade || true);
+            document.getElementById('cfg-max-trades').value = cfg.max_open_trades || 3;
+            document.getElementById('cfg-initial').value = cfg.initial_balance || 10000;
+        }
+    });
+
+    // 保存配置
+    document.getElementById('save-config').addEventListener('click', async function() {
+        const payload = {
+            exchange: document.getElementById('cfg-exchange').value,
+            notifications_enabled: document.getElementById('cfg-notify').value === 'true',
+            auto_trade: document.getElementById('cfg-auto').value === 'true',
+            max_open_trades: parseInt(document.getElementById('cfg-max-trades').value),
+            initial_balance: parseFloat(document.getElementById('cfg-initial').value)
+        };
+        try {
+            const res = await fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            document.getElementById('config-status').textContent = data.success ? '✅ 已保存' : '❌ ' + (data.error || '失败');
+            document.getElementById('config-status').className = data.success ? 'positive' : 'negative';
+        } catch (e) {
+            document.getElementById('config-status').textContent = '网络错误';
+        }
+    });
+});
+</script>
+{% endblock %}

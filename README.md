@@ -750,3 +750,56 @@ Trader
 ---
 
 ## 🔍 技术栈
+---
+
+## 🆚 备选方案：基于 Freqtrade 的中文化定制
+
+如果你更看重成熟度和社区支持，本仓库同时提供了 **freqtrade** 的定制化方案（位于 `custom-config/` 和 `custom-ui/`），满足：
+
+- ✅ 中文化 Web UI
+- ✅ 移动端适配
+- ✅ 不修改 freqtrade 核心代码，易于升级
+
+### 目录
+
+- `custom-config/` - 配置与策略（中文化）
+- `custom-ui/` - 模板与静态资源覆盖
+- `docker-compose.freqtrade.yml` - Docker 编排
+- `docs/freqtrade_custom_guide.md` - 完整使用指南
+
+### 快速启动
+
+```bash
+# 1. 配置环境变量
+cp .env.example .env
+# 编辑 .env 填写交易所 API
+
+# 2. 启动 freqtrade 容器
+docker-compose -f docker-compose.freqtrade.yml up -d
+
+# 3. 访问 Web UI
+# http://localhost:8080
+```
+
+详细说明请阅读：[docs/freqtrade_custom_guide.md](docs/freqtrade_custom_guide.md)
+
+---
+
+## 📊 项目对比
+
+| 特性 | 原生实现 (Python) | Freqtrade 定制版 |
+|------|------------------|------------------|
+| 代码可控性 | 完全自主 | 受限于官方设计 |
+| 社区生态 | 无 | 丰富 |
+| 中文化 | ✅ | ✅ |
+| 移动端 | ✅ | ✅ |
+| 升级维护 | 自主迭代 | 依赖官方发布 |
+| 上手难度 | 低 | 中 |
+
+**选择建议**：
+- 追求 **完全自主可控** → 使用原生实现（本仓库主分支）
+- 追求 **成熟稳定、社区插件多** → 使用 freqtrade 定制（`custom-*` 目录）
+
+---
+
+**祝你交易顺利！🚀**

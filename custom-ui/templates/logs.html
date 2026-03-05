@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+
+{% block title %}日志{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>📋 系统日志</h2>
+    <button class="btn btn-secondary" id="refresh-logs">刷新</button>
+</div>
+
+<div class="card">
+    <div id="log-content" style="background:#1a1a2e; color:#0f0; padding:15px; border-radius:6px; height:500px; overflow-y:auto; font-family:monospace; white-space:pre-wrap;"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function fetchLogs() {
+    fetch('/api/logs?lines=200')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('log-content').textContent = data.logs || '暂无日志';
+        })
+        .catch(() => {
+            document.getElementById('log-content').textContent = '获取日志失败';
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    fetchLogs();
+    document.getElementById('refresh-logs').addEventListener('click', fetchLogs);
+    // 可选：SSE 实时流
+    // connectLogStream();
+});
+</script>
+{% endblock %}

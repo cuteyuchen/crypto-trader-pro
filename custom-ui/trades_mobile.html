@@ -1,0 +1,90 @@
+<!-- 移动端持仓页面 - 横向滚动表格 -->
+<div class="mobile-page" id="trades-mobile-page">
+    <div class="page-header">
+        <h2>持仓管理</h2>
+        <div class="header-actions">
+            <button class="btn-icon" id="refresh-btn" title="刷新">🔄</button>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">总盈亏</div>
+            <div class="stat-value" id="total-pnl-mobile">0.00 USDT</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">活跃持仓</div>
+            <div class="stat-value" id="active-positions-count">0</div>
+        </div>
+    </div>
+
+    <!-- 持仓表格 - 横向滚动 -->
+    <div class="table-container">
+        <table class="positions-table" id="positions-table-mobile">
+            <thead>
+                <tr>
+                    <th class="col-symbol">交易对</th>
+                    <th class="col-side">方向</th>
+                    <th class="col-amount">数量</th>
+                    <th class="col-price">入场价</th>
+                    <th class="col-pnl">盈亏</th>
+                    <th class="col-actions">操作</th>
+                </tr>
+            </thead>
+            <tbody id="positions-body-mobile">
+                <!-- 动态填充 -->
+            </tbody>
+        </table>
+        <div class="empty-state" id="positions-empty-mobile" style="display:none;">
+            <span class="empty-icon">📭</span>
+            <p>暂无持仓</p>
+        </div>
+        <div class="loading-state" id="positions-loading-mobile">加载中...</div>
+    </div>
+
+    <!-- 快速下单悬浮按钮 -->
+    <button class="fab" id="quick-order-fab" aria-label="快速下单">+</button>
+
+    <!-- 快速下单模态框 -->
+    <div class="modal" id="order-modal" style="display:none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>快速下单</h3>
+                <button class="modal-close" id="close-order-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="quick-order-form">
+                    <div class="form-group">
+                        <label>交易对</label>
+                        <select id="order-symbol-mobile" required>
+                            <option value="BTC/USDT">BTC/USDT</option>
+                            <option value="ETH/USDT">ETH/USDT</option>
+                            <option value="SOL/USDT">SOL/USDT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>方向</label>
+                        <div class="button-group">
+                            <button type="button" class="btn-side buy active" data-side="buy">买入</button>
+                            <button type="button" class="btn-side sell" data-side="sell">卖出</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" step="0.001" min="0" id="order-quantity-mobile" placeholder="请输入数量" required>
+                    </div>
+                    <div class="form-group">
+                        <label>类型</label>
+                        <select id="order-type-mobile">
+                            <option value="market">市价单</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-submit">提交订单</button>
+                </form>
+                <div id="order-result-mobile" class="result-box"></div>
+            </div>
+        </div>
+    </div>
+</div>

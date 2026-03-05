@@ -1,0 +1,874 @@
+/* ============================================
+   Crypto Trader Pro - 移动端优先样式
+   设计原则：触摸优化、清晰易读、极简直观
+   ============================================ */
+
+/* CSS 变量 */
+:root {
+    --primary: #667eea;
+    --primary-dark: #5a67d8;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --text: #333333;
+    --text-light: #666666;
+    --border: #e5e7eb;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --touch-min: 44px;
+    --spacing: 16px;
+}
+
+/* 基础重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* ============================================
+   移动端导航栏 (汉堡菜单)
+   ============================================ */
+.mobile-navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    z-index: 1000;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px var(--spacing);
+    min-height: var(--touch-min);
+}
+
+.nav-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    flex: 1;
+    margin-left: 10px;
+}
+
+.nav-status {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* 汉堡按钮 */
+.hamburger {
+    width: var(--touch-min);
+    height: var(--touch-min);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    padding: 10px;
+}
+
+.hamburger span {
+    width: 24px;
+    height: 2px;
+    background: white;
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+
+.hamburger.active span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px);
+}
+
+.hamburger.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.hamburger.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(5px, -5px);
+}
+
+/* 下拉菜单 */
+.nav-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow: var(--shadow);
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.nav-dropdown.show {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    padding: 14px var(--spacing);
+    color: var(--text);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.2s;
+    min-height: var(--touch-min);
+}
+
+.nav-item:last-child {
+    border-bottom: none;
+}
+
+.nav-item:active,
+.nav-item:hover {
+    background: var(--bg);
+}
+
+.nav-item.active {
+    background: rgba(102, 126, 234, 0.1);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.nav-icon {
+    font-size: 1.2rem;
+    margin-right: 12px;
+    width: 24px;
+    text-align: center;
+}
+
+.nav-label {
+    font-size: 1rem;
+}
+
+/* ============================================
+   页面容器
+   ============================================ */
+.mobile-page {
+    padding: 70px var(--spacing) 80px;
+    min-height: 100vh;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing);
+}
+
+.page-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* ============================================
+   按钮 (确保 ≥44px)
+   ============================================ */
+.btn,
+button,
+input[type="submit"] {
+    min-height: var(--touch-min);
+    min-width: var(--touch-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    touch-action: manipulation;
+}
+
+.btn-primary,
+.btn {
+    background: var(--primary);
+    color: white;
+}
+
+.btn-primary:active,
+.btn:active {
+    background: var(--primary-dark);
+    transform: scale(0.98);
+}
+
+.btn-secondary {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.btn-icon {
+    width: var(--touch-min);
+    height: var(--touch-min);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    font-size: 1.2rem;
+    padding: 0;
+}
+
+/* ============================================
+   卡片
+   ============================================ */
+.card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: var(--spacing);
+    margin-bottom: var(--spacing);
+    box-shadow: var(--shadow);
+}
+
+.stat-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: var(--spacing);
+    box-shadow: var(--shadow);
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    margin-bottom: 6px;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.positive {
+    color: var(--success);
+}
+
+.negative {
+    color: var(--danger);
+}
+
+/* ============================================
+   网格布局
+   ============================================ */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--spacing);
+    margin-bottom: var(--spacing);
+}
+
+/* ============================================
+   表格 - 横向滚动
+   ============================================ */
+.table-container {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: var(--spacing);
+}
+
+.positions-table {
+    width: 100%;
+    min-width: 600px;
+    border-collapse: collapse;
+}
+
+.positions-table th,
+.positions-table td {
+    padding: 14px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.positions-table th {
+    background: var(--bg);
+    color: var(--text-light);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+}
+
+.positions-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.positions-table tbody tr:active {
+    background: var(--bg);
+}
+
+/* 表格列宽 */
+.col-symbol { font-weight: 600; min-width: 90px; }
+.col-side { min-width: 60px; }
+.col-amount { min-width: 80px; text-align: right; }
+.col-price { min-width: 80px; text-align: right; }
+.col-pnl { min-width: 80px; text-align: right; font-weight: 600; }
+.col-actions { min-width: 120px; }
+
+/* 方向标签 */
+.badge-side {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.badge-buy {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.badge-sell {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+}
+
+/* 表格操作按钮 */
+.action-btn {
+    display: inline-block;
+    padding: 6px 12px;
+    margin: 2px;
+    font-size: 0.8rem;
+    min-height: 32px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-btn-close {
+    background: var(--danger);
+    color: white;
+}
+
+.action-btn-modify {
+    background: var(--warning);
+    color: white;
+}
+
+/* ============================================
+   状态提示
+   ============================================ */
+.empty-state,
+.loading-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-light);
+}
+
+.empty-icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 10px;
+    opacity: 0.5;
+}
+
+/* ============================================
+   悬浮按钮 (FAB)
+   ============================================ */
+.fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 2rem;
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    cursor: pointer;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.fab:active {
+    transform: scale(0.95);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+/* ============================================
+   模态框
+   ============================================ */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.modal.show .modal-overlay {
+    opacity: 1;
+}
+
+.modal-content {
+    position: relative;
+    background: var(--card);
+    width: 100%;
+    max-width: 500px;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: var(--spacing);
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal.show .modal-content {
+    transform: translateY(0);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing);
+    padding-bottom: var(--spacing);
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.modal-close {
+    width: var(--touch-min);
+    height: var(--touch-min);
+    background: var(--bg);
+    border: none;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-body {
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ============================================
+   表单元素
+   ============================================ */
+.form-group {
+    margin-bottom: var(--spacing);
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 1rem;
+    background: var(--card);
+    color: var(--text);
+    min-height: var(--touch-min);
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 40px;
+}
+
+/* 按钮组 */
+.button-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.btn-side {
+    padding: 12px;
+    border: 2px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    min-height: var(--touch-min);
+}
+
+.btn-side.active {
+    border-color: var(--primary);
+    background: rgba(102, 126, 234, 0.1);
+    color: var(--primary);
+}
+
+.btn-side.buy.active {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+}
+
+.btn-side.sell.active {
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+}
+
+.btn-submit {
+    width: 100%;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+.result-box {
+    margin-top: var(--spacing);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    display: none;
+}
+
+.result-box.success {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+    display: block;
+}
+
+.result-box.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+    display: block;
+}
+
+/* ============================================
+   图表容器
+   ============================================ */
+.chart-container {
+    position: relative;
+    height: 250px;
+    margin-top: var(--spacing);
+}
+
+.chart-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* ============================================
+   策略表单样式 (中文化 + 触摸优化)
+   ============================================ */
+.params-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.param-item {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+}
+
+.param-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.param-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text);
+}
+
+.param-desc {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    margin-bottom: 10px;
+}
+
+.param-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.param-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.param-input-group label {
+    font-size: 0.8rem;
+    color: var(--text-light);
+}
+
+.param-input-group input {
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 1rem;
+    min-height: var(--touch-min);
+}
+
+.param-input-group input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+/* ============================================
+   回测结果页 - 响应式图表
+   ============================================ */
+.bt-results {
+    margin-top: var(--spacing);
+}
+
+.bt-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: var(--spacing);
+}
+
+.bt-stat-card {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    text-align: center;
+}
+
+.bt-stat-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 6px 0;
+}
+
+.bt-stat-label {
+    font-size: 0.8rem;
+    color: var(--text-light);
+}
+
+.bt-chart-container {
+    height: 200px;
+    margin-top: var(--spacing);
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 10px;
+}
+
+/* ============================================
+   底部导航 (替代桌面侧边栏)
+   ============================================ */
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 0;
+    z-index: 999;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    text-decoration: none;
+    color: var(--text-light);
+    font-size: 0.75rem;
+    min-width: 60px;
+    min-height: var(--touch-min);
+    justify-content: center;
+}
+
+.bottom-nav-item.active {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.bottom-nav-icon {
+    font-size: 1.4rem;
+}
+
+/* ============================================
+   实用工具类
+   ============================================ */
+.text-center { text-align: center; }
+.mt-10 { margin-top: 10px; }
+.mt-20 { margin-top: 20px; }
+.mb-10 { margin-bottom: 10px; }
+.mb-20 { margin-bottom: 20px; }
+
+.hidden { display: none !important; }
+.visible { display: block !important; }
+
+/* 动画 */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* ============================================
+   安全区域适配 (iPhone X+)
+   ============================================ */
+@supports (padding: env(safe-area-inset-bottom)) {
+    .mobile-page {
+        padding-bottom: calc(80px + env(safe-area-inset-bottom));
+    }
+
+    .modal-content {
+        padding-bottom: calc(var(--spacing) + env(safe-area-inset-bottom));
+    }
+
+    .bottom-nav {
+        padding-bottom: calc(8px + env(safe-area-inset-bottom));
+    }
+}
+
+/* ============================================
+   暗色模式支持 (可选)
+   ============================================ */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0f172a;
+        --card: #1e293b;
+        --text: #f1f5f9;
+        --text-light: #94a3b8;
+        --border: #334155;
+    }
+
+    .nav-dropdown {
+        background: var(--card);
+    }
+
+    .positions-table th {
+        background: rgba(255, 255, 255, 0.05);
+    }
+}
+
+/* ============================================
+   打印优化
+   ============================================ */
+@media print {
+    .mobile-navbar,
+    .fab,
+    .bottom-nav {
+        display: none !important;
+    }
+
+    .mobile-page {
+        padding: 20px;
+    }
+}
+
+/* ============================================
+   大屏优化 (平板)
+   ============================================ */
+@media (min-width: 768px) {
+    .mobile-page {
+        max-width: 800px;
+        margin: 0 auto;
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}

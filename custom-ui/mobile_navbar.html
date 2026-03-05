@@ -1,0 +1,41 @@
+<!-- 移动端导航栏 - 汉堡菜单 -->
+<nav class="mobile-navbar">
+    <div class="nav-header">
+        <button class="hamburger" id="hamburger-btn" aria-label="菜单">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        <h1 class="nav-title">Crypto Trader Pro</h1>
+        <div class="nav-status" id="mode-badge">local</div>
+    </div>
+
+    <!-- 下拉菜单 -->
+    <div class="nav-dropdown" id="nav-dropdown">
+        <a href="#" class="nav-item active" data-page="dashboard">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">概览</span>
+        </a>
+        <a href="#" class="nav-item" data-page="trades">
+            <span class="nav-icon">💱</span>
+            <span class="nav-label">交易</span>
+        </a>
+        <a href="#" class="nav-item" data-page="strategies">
+            <span class="nav-icon">🧠</span>
+            <span class="nav-label">策略</span>
+        </a>
+        <a href="#" class="nav-item" data-page="backtest">
+            <span class="nav-icon">📈</span>
+            <span class="nav-label">回测</span>
+        </a>
+        <!-- 仅在需要时显示 -->
+        <a href="#" class="nav-item" data-page="logs" style="display:none;" id="logs-nav-item">
+            <span class="nav-icon">📋</span>
+            <span class="nav-label">日志</span>
+        </a>
+        <a href="#" class="nav-item" data-page="settings" style="display:none;" id="settings-nav-item">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">设置</span>
+        </a>
+    </div>
+</nav>

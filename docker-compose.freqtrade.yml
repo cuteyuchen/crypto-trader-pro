@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  freqtrade:
+    image: freqtradeorg/freqtrade:latest
+    container_name: crypto-trader
+    restart: unless-stopped
+    volumes:
+      - ./custom-config:/freqtrade/user_data/config
+      - ./custom-ui:/freqtrade/user_data/ui
+      - ./data:/freqtrade/user_data/data
+      - ./logs:/freqtrade/user_data/logs
+    environment:
+      - TZ=Asia/Shanghai
+      # 交易所 API（通过 .env 注入）
+      - OKX_API_KEY=${OKX_API_KEY}
+      - OKX_SECRET=${OKX_SECRET}
+      - OKX_PASSPHRASE=${OKX_PASSPHRASE}
+      # Telegram 通知（可选）
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      # UI 覆盖路径
+      - FLASK_TEMPLATE_DIR=/freqtrade/user_data/ui/templates
+      - FLASK_STATIC_DIR=/freqtrade/user_data/ui/static
+    command: >
+      trade
+      --strategy MA交叉策略
+      --config /freqtrade/user_data/config/config.json
+      --userdir /freqtrade/user_data
+      --db-url sqlite:///user_data/tradesv3.sqlite
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

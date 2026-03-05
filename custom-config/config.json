@@ -1,0 +1,40 @@
+{
+  "max_open_trades": 3,
+  "stake_currency": "USDT",
+  "stake_amount": 100,
+  "dry_run": true,
+  "dry_run_wallet": 10000,
+  "exchange": {
+    "name": "okx",
+    "key": "${OKX_API_KEY}",
+    "secret": "${OKX_SECRET}",
+    "password": "${OKX_PASSPHRASE}",
+    "ccxt_config": {},
+    "ccxt_async_config": {}
+  },
+  "pairlists": [
+    {
+      "method": "StaticPairList",
+      "pairlist": ["BTC/USDT", "ETH/USDT"]
+    }
+  ],
+  "strategy": "MA交叉策略",
+  "timeframe": "5m",
+  "timerange": "20240101-",
+  "version": 2,
+  "dataformat_ohlcv": "feather",
+  "dataformat_trades": "jsonl",
+  "logfile": "logs/freqtrade.log",
+  "loglevel": "info",
+  "state": "state.json",
+  "position_adjustment_enable": false,
+  "bot_name": "加密货币交易机器人",
+  "metrics": "sharpe",
+  "max_drawdown": 0.20,
+  "stoploss": -0.05,
+  "trailing_stop": false,
+  "roi": {"0": 0.10},
+  "notifications": {
+    "telegram": {"enabled": false}
+  }
+}

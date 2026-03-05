@@ -1,0 +1,100 @@
+{% extends "layout.html" %}
+
+{% block title %}看板{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>📊 系统概览</h2>
+    <div class="header-actions">
+        <span id="mode-badge" class="badge">local</span>
+        <button id="toggle-trader" class="btn btn-primary">停止</button>
+    </div>
+</div>
+
+<!-- 状态卡片 -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">账户余额 (USDT)</div>
+        <div class="stat-value" id="bal">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">总盈亏</div>
+        <div class="stat-value" id="total-pnl">0.00</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">活跃持仓</div>
+        <div class="stat-value" id="open-positions">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">今日交易</div>
+        <div class="stat-value" id="today-trades">0</div>
+    </div>
+</div>
+
+<!-- 余额走势图 -->
+<div class="card">
+    <h3>余额走势</h3>
+    <div class="chart-container">
+        <canvas id="balanceChart"></canvas>
+    </div>
+</div>
+
+<!-- 当前持仓 -->
+<div class="card">
+    <h3>当前持仓</h3>
+    <div class="table-container">
+        <table class="positions-table" id="positions-table">
+            <thead>
+                <tr>
+                    <th class="col-symbol">交易对</th>
+                    <th class="col-side">方向</th>
+                    <th class="col-amount">数量</th>
+                    <th class="col-price">入场价</th>
+                    <th class="col-pnl">盈亏</th>
+                    <th class="col-actions">操作</th>
+                </tr>
+            </thead>
+            <tbody id="positions-body">
+                <tr><td colspan="6" class="text-center">暂无持仓</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 最近交易 -->
+<div class="card">
+    <h3>最近交易</h3>
+    <div class="table-container">
+        <table class="trades-table" id="trades-table">
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>交易对</th>
+                    <th>方向</th>
+                    <th>数量</th>
+                    <th>价格</th>
+                    <th>盈亏</th>
+                </tr>
+            </thead>
+            <tbody id="trades-body">
+                <tr><td colspan="6" class="text-center">暂无交易记录</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/app_v2.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化仪表板
+    fetchStatus();
+    fetchPositions();
+    fetchTrades();
+    setInterval(fetchStatus, 5000);
+    setInterval(fetchPositions, 5000);
+    setInterval(fetchTrades, 10000);
+});
+</script>
+{% endblock %}

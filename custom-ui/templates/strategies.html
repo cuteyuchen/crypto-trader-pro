@@ -1,0 +1,87 @@
+{% extends "layout.html" %}
+
+{% block title %}策略{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>🧠 策略管理</h2>
+    <button class="btn btn-primary" id="reload-strategies">重载所有策略</button>
+</div>
+
+<div class="card">
+    <h3>策略配置</h3>
+    <div id="strategies-list" class="params-list">
+        {% for strategy in strategies %}
+        <div class="strategy-card param-item">
+            <div class="param-header">
+                <span class="param-name">{{ strategy.name }}</span>
+                <span class="badge badge-{{ 'success' if strategy.enabled else 'secondary' }}">{{ '启用' if strategy.enabled else '停用' }}</span>
+            </div>
+            <div class="param-desc">类型: {{ strategy.type }} | 交易对: {{ strategy.pair }}</div>
+            <div class="param-inputs">
+                {% for key, value in strategy.params.items() %}
+                <div class="param-input-group">
+                    <label>{{ key }}</label>
+                    <input type="text" data-param="{{ key }}" value="{{ value }}">
+                </div>
+                {% endfor %}
+            </div>
+            <button class="btn btn-sm save-strategy-btn" data-strategy="{{ strategy.name }}">保存配置</button>
+            <span class="save-status"></span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- 自定义策略参数编辑区 -->
+<div class="card" style="margin-top:20px;">
+    <h3>参数优化 (网格搜索)</h3>
+    <p>在回测页面进行参数优化，详见 <a href="/backtest">回测</a>。</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 重载策略
+    document.getElementById('reload-strategies').addEventListener('click', async function() {
+        try {
+            const res = await fetch('/api/strategy/reload', {method: 'POST'});
+            const data = await res.json();
+            alert(data.success ? '策略已重载' : '重载失败: ' + data.error);
+        } catch (e) {
+            alert('网络错误');
+        }
+    });
+
+    // 保存策略配置
+    document.querySelectorAll('.save-strategy-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const strategyName = this.dataset.strategy;
+            const inputs = this.closest('.strategy-card').querySelectorAll('.param-inputs input');
+            const params = {};
+            inputs.forEach(inp => {
+                params[inp.dataset.param] = parseFloat(inp.value) || inp.value;
+            });
+            try {
+                const res = await fetch('/api/strategy/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({strategy: strategyName, params})
+                });
+                const data = await res.json();
+                const status = this.closest('.strategy-card').querySelector('.save-status');
+                if (data.success) {
+                    status.textContent = '✅ 已保存';
+                    setTimeout(() => status.textContent = '', 2000);
+                } else {
+                    alert('保存失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('网络错误');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

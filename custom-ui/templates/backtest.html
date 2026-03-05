@@ -1,0 +1,175 @@
+{% extends "layout.html" %}
+
+{% block title %}回测{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>📈 回测与优化</h2>
+</div>
+
+<div class="card">
+    <!-- 标签页导航 -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="bt-config">回测配置</button>
+        <button class="tab-btn" data-tab="bt-optimize">参数优化</button>
+    </div>
+
+    <!-- 回测配置 -->
+    <div id="bt-config" class="tab-content">
+        <form id="backtest-form" class="form-grid">
+            <div class="form-group">
+                <label>策略</label>
+                <select id="bt-strategy">
+                    <option value="ma_cross">MA 交叉</option>
+                    <option value="rsi">RSI</option>
+                    <option value="bollinger">布林带</option>
+                    <option value="macd">MACD</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>天数</label>
+                <input type="number" id="bt-days" value="30" min="1" max="365">
+            </div>
+            <div class="form-group">
+                <label>初始资金</label>
+                <input type="number" id="bt-initial" value="10000">
+            </div>
+            <div class="form-group" style="display:flex; align-items:flex-end;">
+                <button type="submit" class="btn btn-primary">开始回测</button>
+            </div>
+        </form>
+        <div id="bt-result" class="bt-results"></div>
+        <div class="chart-container" id="bt-chart" style="display:none;">
+            <canvas id="equity-chart"></canvas>
+        </div>
+    </div>
+
+    <!-- 参数优化 -->
+    <div id="bt-optimize" class="tab-content" style="display:none;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- 左侧：配置 -->
+            <div>
+                <div class="card">
+                    <h3>优化配置</h3>
+                    <form id="optimize-form">
+                        <div class="form-group">
+                            <label>策略选择</label>
+                            <select id="opt-strategy">
+                                <option value="ma_cross">MA 交叉</option>
+                                <option value="rsi">RSI</option>
+                                <option value="bollinger">布林带</option>
+                                <option value="macd">MACD</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>回测天数</label>
+                            <input type="number" id="opt-days" value="30" min="1" max="365">
+                        </div>
+                        <div class="form-group">
+                            <label>初始资金</label>
+                            <input type="number" id="opt-initial" value="10000">
+                        </div>
+                        <div class="form-group">
+                            <label>优化方向</label>
+                            <select id="opt-direction">
+                                <option value="maximize_sharpe">最大化 Sharpe</option>
+                                <option value="maximize_return">最大化收益率</option>
+                                <option value="minimize_drawdown">最小化回撤</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h3>参数范围 <button class="btn btn-sm" id="add-param-btn">+ 添加参数</button></h3>
+                    <div id="params-container">
+                        <div class="param-row">
+                            <input type="text" class="param-name" placeholder="参数名 (如:fast_period)">
+                            <input type="number" class="param-min" placeholder="min">
+                            <input type="number" class="param-max" placeholder="max">
+                            <input type="number" class="param-step" placeholder="step">
+                            <button type="button" class="remove-param btn btn-sm btn-danger">×</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="start-optimize-btn" class="btn btn-primary" style="width:100%; margin-top:15px;">开始优化</button>
+            </div>
+
+            <!-- 右侧：进度与结果 -->
+            <div>
+                <div class="card">
+                    <h3>优化进度</h3>
+                    <div id="optimize-progress" style="display:none;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <span id="progress-text">0%</span>
+                            <span id="progress-count">0 / 0</span>
+                        </div>
+                        <div class="progress-bar-bg" style="background:#eee; height:20px; border-radius:4px; overflow:hidden;">
+                            <div id="progress-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.3s;"></div>
+                        </div>
+                        <div id="optimize-log" style="margin-top:15px; background:#f8f9fa; padding:10px; border-radius:4px; height:150px; overflow-y:auto; font-family:monospace; font-size:0.85rem;"></div>
+                    </div>
+                    <div id="optimize-waiting" class="text-center" style="padding:30px; color:#999;">
+                        <p>配置参数范围后点击"开始参数优化"</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>优化结果 <button id="export-csv-btn" class="btn btn-sm" style="display:none;">导出 CSV</button></h3>
+                    <div id="results-container">
+                        <p id="no-results" class="text-center" style="padding:30px; color:#999;">暂无优化结果</p>
+                        <table id="results-table" style="display:none; width:100%; border-collapse:collapse; margin-top:10px;">
+                            <thead>
+                                <tr style="background:#f8f9fa;">
+                                    <th style="padding:10px;">参数组合</th>
+                                    <th style="padding:10px;">Sharpe</th>
+                                    <th style="padding:10px;">收益率</th>
+                                    <th style="padding:10px;">最大回撤</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 标签页切换
+document.addEventListener('DOMContentLoaded', function() {
+    const tabs = document.querySelectorAll('.tab-btn');
+    tabs.forEach(btn => {
+        btn.addEventListener('click', function() {
+            tabs.forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            this.classList.add('active');
+            document.getElementById(this.dataset.tab).style.display = 'block';
+        });
+    });
+
+    // 参数行管理
+    document.getElementById('add-param-btn').addEventListener('click', function() {
+        const container = document.getElementById('params-container');
+        const row = document.createElement('div');
+        row.className = 'param-row';
+        row.innerHTML = `
+            <input type="text" class="param-name" placeholder="参数名">
+            <input type="number" class="param-min" placeholder="min">
+            <input type="number" class="param-max" placeholder="max">
+            <input type="number" class="param-step" placeholder="step">
+            <button type="button" class="remove-param btn btn-sm btn-danger">×</button>
+        `;
+        container.appendChild(row);
+        row.querySelector('.remove-param').addEventListener('click', () => row.remove());
+    });
+
+    // 初始化回测和优化逻辑 (需要与后端 API 对接)
+    // 此处省略具体实现，参考 app_v2.js
+});
+</script>
+{% endblock %}

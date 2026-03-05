@@ -143,6 +143,12 @@ class StrategyEngine:
             elif strategy_type == "rsi":
                 from .strategies.rsi_strategy import RSIStrategy
                 return RSIStrategy(config)
+            elif strategy_type == "bollinger":
+                from .strategies.bollinger_bands import BollingerBandsStrategy
+                return BollingerBandsStrategy(config)
+            elif strategy_type == "macd":
+                from .strategies.macd import MACDStrategy
+                return MACDStrategy(config)
             else:
                 raise ValueError(f"不支持的策略类型: {strategy_type}")
         else:

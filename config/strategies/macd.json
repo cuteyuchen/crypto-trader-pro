@@ -1,0 +1,12 @@
+{
+  "name": "MACD_12_26_9",
+  "symbol": "BTC/USDT",
+  "timeframe": "1m",
+  "type": "macd",
+  "fast_period": 12,
+  "slow_period": 26,
+  "signal_period": 9,
+  "position_size": 0.2,
+  "stop_loss_pct": 0.05,
+  "take_profit_pct": 0.10
+}

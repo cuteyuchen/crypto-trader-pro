@@ -72,15 +72,16 @@ class OrderExecutor:
         quantity = float(order["quantity"])
         order_type = order.get("type", "market")
         price = order.get("price")
+        strategy = order.get("strategy")  # 策略名称
 
         if self.mode == "local":
-            return await self._execute_local(order, symbol, side, quantity, price, order_type)
+            return await self._execute_local(order, symbol, side, quantity, price, order_type, strategy)
         elif self.mode in ("testnet", "live"):
             return await self._execute_ccxt(symbol, side, quantity, price)
         else:
             return {"success": False, "error": f"未知模式: {self.mode}"}
 
-    async def _execute_local(self, order, symbol, side, quantity, price, order_type) -> Dict[str, Any]:
+    async def _execute_local(self, order, symbol, side, quantity, price, order_type, strategy: str = None) -> Dict[str, Any]:
         """本地模拟执行"""
         if price is None:
             price = 50000.0  # 默认假价格，实际应从 WS 获取
@@ -94,12 +95,24 @@ class OrderExecutor:
             self.simulation_db.set_balance("USDT", usdt_balance - cost)
             self.simulation_db.open_position(symbol, "long", quantity, price)
 
+            # 记录买入交易（策略名）
+            fee = cost * 0.001
+            conn = self.simulation_db._get_connection()
+            try:
+                conn.execute("""
+                    INSERT INTO trades (symbol, side, quantity, price, fee, pnl, strategy, executed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (symbol, "buy", quantity, price, fee, 0.0, strategy))
+                conn.commit()
+            finally:
+                conn.close()
+
             return {
                 "success": True,
                 "order_id": f"local_{datetime.now().timestamp()}",
                 "filled_quantity": quantity,
                 "avg_price": price,
-                "fee": cost * 0.001,
+                "fee": fee,
                 "pnl": 0.0
             }
 
@@ -114,7 +127,7 @@ class OrderExecutor:
                 raise ValueError("没有可平的长仓持仓")
 
             exit_price = price
-            pnl = self.simulation_db.close_position(symbol, "long", quantity, exit_price)
+            pnl = self.simulation_db.close_position(symbol, "long", quantity, exit_price, strategy=strategy)
             proceeds = exit_price * quantity
             fee = proceeds * 0.001
             net = proceeds - fee

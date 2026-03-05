@@ -46,6 +46,7 @@ class SimulationDB:
                     price REAL NOT NULL,
                     fee REAL DEFAULT 0,
                     pnl REAL DEFAULT 0,  -- 平仓时的盈亏
+                    strategy TEXT,         -- 使用的策略名称
                     executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -101,7 +102,7 @@ class SimulationDB:
                 """, (current_price, upnl, pos_id))
             conn.commit()
 
-    def close_position(self, symbol: str, side: str, quantity: float, exit_price: float, fee: float = 0) -> float:
+    def close_position(self, symbol: str, side: str, quantity: float, exit_price: float, fee: float = 0, strategy: str = None) -> float:
         """平仓：记录交易并标记持仓为已关闭"""
         with sqlite3.connect(self.db_path) as conn:
             # 查找对应的未平仓持仓（FIFO）
@@ -125,11 +126,11 @@ class SimulationDB:
             else:  # short
                 pnl = (entry_price - exit_price) * quantity
 
-            # 插入交易记录
+            # 插入交易记录（包含策略名）
             conn.execute("""
-                INSERT INTO trades (symbol, side, quantity, price, fee, pnl, executed_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            """, (symbol, "sell" if side == "long" else "buy", quantity, exit_price, fee, pnl))
+                INSERT INTO trades (symbol, side, quantity, price, fee, pnl, strategy, executed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (symbol, "sell" if side == "long" else "buy", quantity, exit_price, fee, pnl, strategy))
 
             # 如果部分平仓，减少持仓数量；完全平仓则标记 closed_at
             remaining = qty - quantity

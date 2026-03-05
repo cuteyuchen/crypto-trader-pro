@@ -297,13 +297,8 @@ class TestMACDStrategy:
         strategy = MACDStrategy(macd_config)
 
         # 需要足够数据：至少 slow_period + signal_period = 35
-        needed = strategy.slow_period + strategy.signal_period
-        # 构造上涨序列使 MACD 上穿信号线
-        # 前 30 根窄幅波动，后 20 根快速上升
-        base = [50000] * 30
-        ramp = [50000 + i * 100 for i in range(1, 21)]
-        prices = base + ramp
-
+        # 构造精确金叉数据：前 35 根 50000，最后 5 根中第 5 根大涨
+        prices = [50000] * 35 + [50000, 50000, 50000, 50000, 60000]
         df = pd.DataFrame({'close': prices})
 
         signal = strategy.on_kline(df)

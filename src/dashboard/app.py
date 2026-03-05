@@ -7,6 +7,7 @@ import logging
 import sqlite3
 from datetime import datetime, date
 from subprocess import run, PIPE
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,10 @@ class Dashboard:
         # 认证配置
         self.auth_user = os.getenv('DASHBOARD_USER', 'admin')
         self.auth_pass = os.getenv('DASHBOARD_PASS', 'admin123')
-        
+
+        # 配置日志文件输出
+        self._setup_file_logging()
+
         # 全局请求前验证（除了静态文件）
         @self.app.before_request
         def check_auth():
@@ -42,7 +46,7 @@ class Dashboard:
             auth = request.authorization
             if not auth or not (auth.username == self.auth_user and auth.password == self.auth_pass):
                 return Response('需要认证\n', 401, {'WWW-Authenticate': 'Basic realm="Dashboard"'})
-        
+
         self._setup_routes()
 
     def _run_async(self, coro):
@@ -53,6 +57,24 @@ class Dashboard:
             return asyncio.run(coro)
         future = asyncio.run_coroutine_threadsafe(coro, loop)
         return future.result(timeout=10)
+
+    def _setup_file_logging(self):
+        """配置日志文件输出，用于 SSE 流式读取"""
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, 'latest.log')
+
+        # 避免重复添加 handler
+        root_logger = logging.getLogger()
+        if any(isinstance(h, logging.FileHandler) and h.baseFilename == log_file for h in root_logger.handlers):
+            return  # 已配置
+
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+        logger.info(f"日志文件已配置: {log_file}")
 
     def _setup_routes(self):
         """设置路由"""
@@ -480,7 +502,7 @@ class Dashboard:
 
         @self.app.route('/api/backtest', methods=['POST'])
         def run_backtest():
-            """运行回测（简化版）"""
+            """运行回测（详细指标版）"""
             bot = self.trading_bot
             try:
                 req = request.get_json()
@@ -499,6 +521,16 @@ class Dashboard:
                 from src.backtest.engine import BacktestEngine
                 engine = BacktestEngine(strategy_cfg, initial_balance=initial)
                 result = engine.run(days=days)
+
+                # 添加详细指标计算
+                from src.backtest.metrics import BacktestMetrics
+                metrics = BacktestMetrics.calculate(
+                    equity_curve=result.get('equity_curve', []),
+                    trades=result.get('trades', [])
+                )
+
+                # 合并基础信息和详细指标
+                result['metrics'] = metrics
                 return jsonify(result)
             except Exception as e:
                 logger.exception("回测失败")

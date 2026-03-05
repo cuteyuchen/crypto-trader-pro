@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  trader:
+    build: .
+    container_name: crypto-trader-pro
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data          # 持久化数据（持仓、日志）
+      - ./config:/app/config      # 配置文件（可热更新）
+      - ./logs:/app/logs          # 日志目录
+    ports:
+      - "5000:5000"               # Web 看板
+      # - "8080:8080"            # 健康检查（可选，注释掉避免冲突）
+    command: python -m src.main
+    # 网络模式：host（为了低延迟访问交易所）或 bridge
+    # network_mode: "host"  # 如需低延迟取消注释
+
+  # 可选：Prometheus 监控
+  # prometheus:
+  #   image: prom/prometheus
+  #   volumes:
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  #   ports:
+  #     - "9090:9090"

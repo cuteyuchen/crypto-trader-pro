@@ -1,0 +1,13 @@
+{
+  "name": "MA5_MA20_Cross",
+  "type": "ma_cross",
+  "symbol": "BTC/USDT",
+  "timeframe": "1m",
+  "params": {
+    "fast_period": 5,
+    "slow_period": 20
+  },
+  "position_size": 0.2,
+  "stop_loss_pct": 0.05,
+  "take_profit_pct": 0.10
+}

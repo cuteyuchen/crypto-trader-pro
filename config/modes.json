@@ -1,0 +1,10 @@
+{
+  "mode": "local",
+  "exchange": "okx",
+  "initial_balance": 10000,
+  "default_exchange": "binance",
+  "symbols": ["BTC/USDT"],
+  "update_interval_ms": 1000,
+  "dashboard_enabled": true,
+  "notifications_enabled": true
+}

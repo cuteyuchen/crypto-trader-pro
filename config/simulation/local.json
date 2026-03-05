@@ -1,0 +1,7 @@
+{
+  "initial_balance": 10000,
+  "balance_currency": "USDT",
+  "fee_pct": 0.001,
+  "slippage_pct": 0.0005,
+  "order_type": "market"
+}

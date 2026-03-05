@@ -1,0 +1,10 @@
+{
+  "name": "binance",
+  "api_key": "${BINANCE_API_KEY}",
+  "api_secret": "${BINANCE_API_SECRET}",
+  "testnet": ${BINANCE_TESTNET:-true},
+  "enable_rate_limit": true,
+  "default_type": "spot",
+  "pairs": ["BTC/USDT"],
+  "leverage": 1
+}

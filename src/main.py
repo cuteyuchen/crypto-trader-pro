@@ -279,12 +279,16 @@ class TradingBot:
         # 3. 启动 WebSocket 监听
         ws_task = asyncio.create_task(self.ws.start())
 
-        # 4. 主循环：打印状态 + 日报检查
+        # 4. 主循环：打印状态 + 日报检查（异常保护）
         try:
             while self.running:
-                await asyncio.sleep(10)
-                await self.print_status()
-                await self.check_daily_report()
+                try:
+                    await asyncio.sleep(10)
+                    await self.print_status()
+                    await self.check_daily_report()
+                except Exception as e:
+                    logger.error(f"主循环异常: {e}", exc_info=True)
+                    await asyncio.sleep(5)  # 短暂等待后继续
         except KeyboardInterrupt:
             logger.info("收到停止信号")
             self.running = False

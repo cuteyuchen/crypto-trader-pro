@@ -21,7 +21,7 @@ class OKXWS:
             symbol: 交易对，格式 "BTC-USDT"
             callback: 回调函数，接收 dict
         """
-        self.symbol = symbol.lower()
+        self.symbol = symbol.upper()  # 保持大写，OKX 需要
         self.callback = callback
         self.ws_url = "wss://ws.okx.com:8443/ws/v5/public"
         self.connection = None
@@ -29,21 +29,22 @@ class OKXWS:
 
     async def connect(self):
         """建立连接并订阅K线"""
-        url = f"{self.ws_url}?brokerId=9999"
+        url = self.ws_url  # 不使用 brokerId 参数
         logger.info(f"连接到 OKX WS: {url} (symbol: {self.symbol})")
         self.connection = await websockets.connect(url)
         
+        # OKX 订阅：channel + instId
         subscribe_msg = {
             "op": "subscribe",
             "args": [
                 {
                     "channel": "candle1m",
-                    "instId": self.symbol.upper()
+                    "instId": self.symbol
                 }
             ]
         }
         await self.connection.send(json.dumps(subscribe_msg))
-        logger.info("OKX WS 已连接并订阅")
+        logger.info("OKX WS 已订阅 K线")
 
     async def disconnect(self):
         if self.connection:
@@ -55,7 +56,7 @@ class OKXWS:
         # [ts, open, high, low, close, vol, volCcy, ...]
         return {
             "exchange": "okx",
-            "symbol": self.symbol.upper().replace("-", "/"),
+            "symbol": self.symbol.replace("-", "/"),
             "timestamp": int(candle[0]),
             "open": float(candle[1]),
             "high": float(candle[2]),

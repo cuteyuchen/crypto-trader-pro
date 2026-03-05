@@ -1,9 +1,9 @@
 {
   "mode": "local",
-  "exchange": "okx",
+  "exchange": "binance",
   "initial_balance": 10000,
   "symbols": ["BTC/USDT"],
-  "strategy": "ma_cross",  // 策略配置文件名 (ma_cross 或 rsi)
+  "strategy": "ma_cross",
   "update_interval_ms": 1000,
   "dashboard_enabled": true,
   "notifications_enabled": true

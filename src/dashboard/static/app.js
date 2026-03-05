@@ -281,3 +281,59 @@ function updateBalanceChart() {
         });
     }
 }
+
+/**
+ * 交易表单提交
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('trade-form');
+    const resultDiv = document.getElementById('trade-result');
+    
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const symbol = document.getElementById('trade-symbol').value;
+            const side = document.getElementById('trade-side').value;
+            const quantity = parseFloat(document.getElementById('trade-quantity').value);
+            const type = document.getElementById('trade-type').value;
+            
+            if (!quantity || quantity <= 0) {
+                resultDiv.textContent = '❌ 请输入有效的数量';
+                resultDiv.style.color = '#ef4444';
+                return;
+            }
+            
+            resultDiv.textContent = '⏳ 提交中...';
+            resultDiv.style.color = '#333';
+            
+            try {
+                const response = await fetch('/api/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol,
+                        side,
+                        quantity,
+                        type
+                    })
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    resultDiv.innerHTML = `✅ 订单已提交<br>订单ID: ${data.order_id}<br>成交均价: $${data.avg_price.toFixed(2)}<br>数量: ${data.filled_quantity}<br>手续费: $${data.fee.toFixed(4)}`;
+                    resultDiv.style.color = '#10b981';
+                    form.reset();
+                    // 3秒后刷新数据
+                    setTimeout(() => {
+                        fetchData();
+                    }, 3000);
+                } else {
+                    resultDiv.innerHTML = `❌ 下单失败: ${data.error || '未知错误'}`;
+                    resultDiv.style.color = '#ef4444';
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `❌ 网络错误: ${err.message}`;
+                resultDiv.style.color = '#ef4444';
+            }
+        });
+    }
+});

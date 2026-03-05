@@ -5,6 +5,9 @@ services:
     build: .
     container_name: crypto-trader-pro
     restart: unless-stopped
+    environment:
+      - DASHBOARD_USER=${DASHBOARD_USER:-admin}
+      - DASHBOARD_PASS=${DASHBOARD_PASS:-admin123}
     env_file:
       - .env
     volumes:

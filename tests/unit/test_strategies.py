@@ -23,22 +23,20 @@ class TestMovingAverageStrategy:
         assert strategy.slow_period == 20
         assert strategy.state == "out"
 
-    def test_golden_cross_signal(self, ma_cross_config, sample_klines):
+    def test_golden_cross_signal(self, ma_cross_config):
         """测试金叉买入信号"""
+        import pandas as pd
         strategy = MovingAverageStrategy(ma_cross_config)
 
-        # 构造金叉场景：fast_MA 上穿 slow_MA
-        # 使用足够的数据
-        df = sample_klines.copy()
-
-        # 手动设置最后两行的 close 使得出现金叉
-        # 需要 fast_ma[-2] <= slow_ma[-2] and fast_ma[-1] > slow_ma[-1]
-        # 简单做法：让最后 close 快速上升
-        df.loc[df.index[-2], 'close'] = 50000
-        df.loc[df.index[-1], 'close'] = 50500  # 上涨
+        # 构造精确的金叉数据：
+        # fast_period=5, slow_period=20
+        # 需要 30 根数据：前 28 根 50000，第 29 根 50000，第 30 根 60000
+        # 这样 fast_ma[-2]=50000, slow_ma[-2]=50000, fast_ma[-1]=52000, slow_ma[-1]=50500 -> 金叉
+        prices = [50000] * 28 + [50000, 60000]
+        df = pd.DataFrame({'close': prices})
 
         signal = strategy.on_kline(df)
-        assert signal is not None
+        assert signal is not None, f"金叉未触发，状态: {strategy.state}"
         assert signal['action'] == 'buy'
         assert '金叉' in signal['reason']
         assert strategy.state == 'long'
@@ -293,31 +291,26 @@ class TestMACDStrategy:
         assert strategy.signal_period == 9
         assert strategy.state == 'out'
 
-    def test_bullish_crossover_signal(self, macd_config, sample_klines):
+    def test_bullish_crossover_signal(self, macd_config):
         """测试 MACD 金叉买入信号"""
+        import pandas as pd
         strategy = MACDStrategy(macd_config)
 
-        df = sample_klines.copy()
-        closes = df['close']
+        # 需要足够数据：至少 slow_period + signal_period = 35
+        needed = strategy.slow_period + strategy.signal_period
+        # 构造上涨序列使 MACD 上穿信号线
+        # 前 30 根窄幅波动，后 20 根快速上升
+        base = [50000] * 30
+        ramp = [50000 + i * 100 for i in range(1, 21)]
+        prices = base + ramp
 
-        # 计算 MACD  Components
-        fast_ema = closes.ewm(span=12, adjust=False).mean()
-        slow_ema = closes.ewm(span=26, adjust=False).mean()
-        macd = fast_ema - slow_ema
-        signal_line = macd.ewm(span=9, adjust=False).mean()
+        df = pd.DataFrame({'close': prices})
 
-        # 构造金叉：MACD 上穿信号线
-        # 需要 macd[-2] <= signal[-2] and macd[-1] > signal[-1]
-        # 调整最后几天的 close 价格
-        df.loc[df.index[-2], 'close'] = 50000
-        df.loc[df.index[-1], 'close'] = 50500
-
-        result = strategy.on_kline(df)
-        # 由于数据长度不够（需要至少 35 根），先确保数据足够
-        if len(df) >= 35:
-            assert result is not None
-            assert result['action'] == 'buy'
-            assert '金叉' in result['reason']
+        signal = strategy.on_kline(df)
+        assert signal is not None, f"MACD 金叉未产生，状态: {strategy.state}"
+        assert signal['action'] == 'buy'
+        assert '金叉' in signal['reason']
+        assert strategy.state == 'long'
 
     def test_bearish_crossover_signal(self, macd_config, sample_klines):
         """测试 MACD 死叉卖出信号"""

@@ -434,6 +434,136 @@ function startLogPolling() {
     if (logPolling) clearInterval(logPolling);
     logPolling = setInterval(fetchLogs, 3000);
 }
+
+// ==================== 网格搜索优化功能 ====================
+let currentOptimizeJobId = null;
+let optimizePolling = null;
+
+// 标签页切换（回测页面内）
+document.addEventListener('DOMContentLoaded', () => {
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            btn.classList.add('active');
+            const tabId = btn.getAttribute('data-tab');
+            document.getElementById(tabId).style.display = 'block';
+        });
+    });
+
+    // 添加参数行
+    document.getElementById('add-param-btn')?.addEventListener('click', () => {
+        const row = document.createElement('div');
+        row.className = 'param-row';
+        row.innerHTML = `
+            <input type="text" class="param-name" placeholder="参数名 (如: fast_period)" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+            <input type="number" class="param-min" placeholder="min" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+            <input type="number" class="param-max" placeholder="max" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+            <input type="number" class="param-step" placeholder="step" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+            <button type="button" class="remove-param btn btn-sm btn-danger" style="padding: 4px 8px;">×</button>
+        `;
+        row.querySelector('.remove-param').addEventListener('click', () => row.remove());
+        document.getElementById('params-container').appendChild(row);
+    });
+
+    // 开始优化按钮
+    document.getElementById('start-optimize-btn')?.addEventListener('click', async () => {
+        const params = [];
+        document.querySelectorAll('.param-row').forEach(row => {
+            const name = row.querySelector('.param-name').value.trim();
+            const min = parseFloat(row.querySelector('.param-min').value);
+            const max = parseFloat(row.querySelector('.param-max').value);
+            const step = parseFloat(row.querySelector('.param-step').value);
+            if (name && !isNaN(min) && !isNaN(max) && !isNaN(step)) {
+                params.push({ name, min, max, step });
+            }
+        });
+        if (params.length === 0) {
+            alert('请至少添加一个参数范围');
+            return;
+        }
+        const payload = {
+            strategy: document.getElementById('opt-strategy').value,
+            days: parseInt(document.getElementById('opt-days').value),
+            initial_balance: parseFloat(document.getElementById('opt-initial').value),
+            direction: document.getElementById('opt-direction').value,
+            param_ranges: params
+        };
+        try {
+            const res = await fetch(`${API_BASE}/api/backtest/optimize`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.success) {
+                currentOptimizeJobId = data.job_id;
+                document.getElementById('optimize-waiting').style.display = 'none';
+                document.getElementById('optimize-progress').style.display = 'block';
+                startOptimizePolling();
+            } else {
+                alert('启动优化失败: ' + (data.error || '未知错误'));
+            }
+        } catch (e) {
+            console.error('优化启动失败', e);
+            alert('网络错误');
+        }
+    });
+
+    // 导出 CSV
+    document.getElementById('export-csv-btn')?.addEventListener('click', () => {
+        if (!currentOptimizeJobId) return;
+        window.open(`${API_BASE}/api/backtest/optimize/export/${currentOptimizeJobId}`, '_blank');
+    });
+});
+
+function startOptimizePolling() {
+    if (optimizePolling) clearInterval(optimizePolling);
+    optimizePolling = setInterval(async () => {
+        if (!currentOptimizeJobId) return;
+        try {
+            const res = await fetch(`${API_BASE}/api/backtest/optimize/status/${currentOptimizeJobId}`);
+            const data = await res.json();
+            // 更新进度
+            const total = data.total_combinations || 1;
+            const completed = data.completed || 0;
+            const percent = Math.round((completed / total) * 100);
+            document.getElementById('progress-bar').style.width = percent + '%';
+            document.getElementById('progress-text').textContent = percent + '%';
+            document.getElementById('progress-count').textContent = `${completed} / ${total}`;
+            // 更新日志
+            const logDiv = document.getElementById('optimize-log');
+            if (data.logs) {
+                logDiv.innerHTML = data.logs.map(l => `<div class="log-entry log-${l.level}">${l.time} ${l.message}</div>`).join('');
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+            // 更新结果
+            if (data.best_result) {
+                const tbody = document.getElementById('results-body');
+                tbody.innerHTML = `
+                    <tr>
+                        <td>${Object.entries(data.best_result.params).map(([k,v])=>k+'='+v).join(', ')}</td>
+                        <td class="positive">${data.best_result.sharpe?.toFixed(3) || '-'}</td>
+                        <td class="positive">${data.best_result.return_pct?.toFixed(2) || '-'}%</td>
+                        <td class="negative">${data.best_result.max_drawdown_pct?.toFixed(2) || '-'}%</td>
+                    </tr>
+                `;
+                document.getElementById('results-table').style.display = 'table';
+                document.getElementById('export-csv-btn').style.display = 'inline-block';
+                document.getElementById('no-results').style.display = 'none';
+            }
+            if (data.status === 'completed' || data.status === 'cancelled') {
+                clearInterval(optimizePolling);
+            }
+        } catch (e) {
+            console.error('轮询优化状态失败', e);
+        }
+    }, 1000);
+}
+
+// ============================================================
+
 document.addEventListener('DOMContentLoaded', () => {
     // 监听页面切换
     const observer = new MutationObserver(() => {

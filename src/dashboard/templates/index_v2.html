@@ -44,6 +44,29 @@
             .main { padding: 10px; }
             .status-bar { grid-template-columns: 1fr 1fr; }
         }
+        /* 网格搜索样式 */
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #eee; }
+        .tab-btn { padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid transparent; color: #666; font-weight: 500; transition: all 0.2s; }
+        .tab-btn:hover { color: var(--primary); }
+        .tab-btn.active { border-bottom-color: var(--primary); color: var(--primary); }
+        .param-row { display: grid; grid-template-columns: 1fr 80px 80px 80px 32px; gap: 8px; margin-bottom: 10px; align-items: center; }
+        .param-row input { padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; }
+        .param-row input:focus { outline: none; border-color: var(--primary); }
+        .remove-param { padding: 4px 8px; font-size: 1.2rem; line-height: 1; }
+        #optimize-log { font-size: 0.85rem; line-height: 1.4; }
+        #optimize-log .log-entry { margin-bottom: 4px; padding: 2px 0; border-bottom: 1px dashed #eee; }
+        #optimize-log .log-info { color: #333; }
+        #optimize-log .log-success { color: var(--success); }
+        #optimize-log .log-warning { color: #f59e0b; }
+        #optimize-log .log-error { color: var(--danger); }
+        #results-table th, #results-table td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+        #results-table th { background: #f8f9fa; color: #666; font-weight: 600; position: sticky; top: 0; }
+        #results-table tbody tr:hover { background: #f8f9fa; }
+        @media (max-width: 768px) {
+            .param-row { grid-template-columns: 1fr 1fr; gap: 6px; }
+            .param-row .remove-param { grid-column: 2; grid-row: 2; }
+            #optimize-progress { margin: 0 10px; }
+        }
     </style>
 </head>
 <body>
@@ -169,31 +192,139 @@
         <!-- 回测页面 -->
         <div id="backtest" class="page" style="display:none;">
             <div class="card">
-                <h3>回测配置</h3>
-                <form id="backtest-form" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
-                    <div class="form-group">
-                        <label>策略</label>
-                        <select id="bt-strategy">
-                            <option value="ma_cross">MA 交叉</option>
-                            <option value="rsi">RSI</option>
-                            <option value="bollinger">布林带</option>
-                            <option value="macd">MACD</option>
-                        </select>
+                <!-- 标签页导航 -->
+                <div class="tabs" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #eee;">
+                    <button class="tab-btn active" data-tab="bt-config" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid var(--primary); font-weight: 500;">回测配置</button>
+                    <button class="tab-btn" data-tab="bt-optimize" style="padding: 10px 20px; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid transparent; color: #666;">参数优化</button>
+                </div>
+
+                <!-- 回测配置标签页 -->
+                <div id="bt-config" class="tab-content">
+                    <form id="backtest-form" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
+                        <div class="form-group">
+                            <label>策略</label>
+                            <select id="bt-strategy">
+                                <option value="ma_cross">MA 交叉</option>
+                                <option value="rsi">RSI</option>
+                                <option value="bollinger">布林带</option>
+                                <option value="macd">MACD</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>天数</label>
+                            <input type="number" id="bt-days" value="30" min="1" max="365">
+                        </div>
+                        <div class="form-group">
+                            <label>初始资金</label>
+                            <input type="number" id="bt-initial" value="10000">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end;">
+                            <button type="submit" class="btn">开始回测</button>
+                        </div>
+                    </form>
+                    <div id="bt-result" style="margin-top: 20px;"></div>
+                    <canvas id="bt-chart" class="chart-container" style="display:none;"></canvas>
+                </div>
+
+                <!-- 参数优化标签页 -->
+                <div id="bt-optimize" class="tab-content" style="display: none;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <!-- 左侧：配置区域 -->
+                        <div>
+                            <div class="card" style="margin-bottom: 20px;">
+                                <h3>优化配置</h3>
+                                <form id="optimize-form">
+                                    <div class="form-group">
+                                        <label>策略选择</label>
+                                        <select id="opt-strategy" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                            <option value="ma_cross">MA 交叉</option>
+                                            <option value="rsi">RSI</option>
+                                            <option value="bollinger">布林带</option>
+                                            <option value="macd">MACD</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>回测天数</label>
+                                        <input type="number" id="opt-days" value="30" min="1" max="365" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>初始资金 (USDT)</label>
+                                        <input type="number" id="opt-initial" value="10000" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>优化方向</label>
+                                        <select id="opt-direction" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                            <option value="maximize_sharpe">最大化 Sharpe</option>
+                                            <option value="maximize_return">最大化收益率</option>
+                                            <option value="minimize_drawdown">最小化最大回撤</option>
+                                            <option value="custom_score">自定义评分 (Sharpe×收益/回撤)</option>
+                                        </select>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div class="card">
+                                <h3>参数范围设置 <button type="button" id="add-param-btn" class="btn btn-sm" style="float: right; margin-top: -8px;">+ 添加参数</button></h3>
+                                <div id="params-container" style="margin-top: 15px;">
+                                    <!-- 参数行示例 -->
+                                    <div class="param-row" style="display: grid; grid-template-columns: 1fr 80px 80px 80px 32px; gap: 8px; margin-bottom: 10px; align-items: center;">
+                                        <input type="text" class="param-name" placeholder="参数名 (如: fast_period)" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+                                        <input type="number" class="param-min" placeholder="min" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+                                        <input type="number" class="param-max" placeholder="max" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+                                        <input type="number" class="param-step" placeholder="step" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+                                        <button type="button" class="remove-param btn btn-sm btn-danger" style="padding: 4px 8px;">×</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="text-align: center; margin-top: 15px;">
+                                <button id="start-optimize-btn" class="btn" style="width: 100%; padding: 12px; font-size: 1rem;">开始参数优化</button>
+                            </div>
+                        </div>
+
+                        <!-- 右侧：进度和结果 -->
+                        <div>
+                            <!-- 优化进度 -->
+                            <div class="card" style="margin-bottom: 20px;">
+                                <h3>优化进度</h3>
+                                <div id="optimize-progress" style="display: none;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                        <span id="progress-text">0%</span>
+                                        <span id="progress-count">0 / 0</span>
+                                    </div>
+                                    <div style="background: #eee; height: 20px; border-radius: 4px; overflow: hidden;">
+                                        <div id="progress-bar" style="background: var(--primary); height: 100%; width: 0%; transition: width 0.3s;"></div>
+                                    </div>
+                                    <div id="optimize-log" style="margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 4px; height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; color: #666;"></div>
+                                </div>
+                                <div id="optimize-waiting" style="text-align: center; padding: 30px; color: #999;">
+                                    <p>配置参数范围后点击"开始参数优化"</p>
+                                </div>
+                            </div>
+
+                            <!-- 优化结果 -->
+                            <div class="card">
+                                <h3>优化结果 
+                                    <button id="export-csv-btn" class="btn btn-sm" style="float: right; margin-top: -8px; display: none;">导出 CSV</button>
+                                </h3>
+                                <div id="results-container" style="margin-top: 15px;">
+                                    <p id="no-results" style="color: #999; text-align: center; padding: 30px;">暂无优化结果</p>
+                                    <table id="results-table" style="display: none; width: 100%; border-collapse: collapse; margin-top: 10px;">
+                                        <thead>
+                                            <tr style="background: #f8f9fa;">
+                                                <th style="padding: 10px; text-align: left;">参数组合</th>
+                                                <th style="padding: 10px;">Sharpe</th>
+                                                <th style="padding: 10px;">收益率</th>
+                                                <th style="padding: 10px;">最大回撤</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="results-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>天数</label>
-                        <input type="number" id="bt-days" value="30" min="1" max="365">
-                    </div>
-                    <div class="form-group">
-                        <label>初始资金</label>
-                        <input type="number" id="bt-initial" value="10000">
-                    </div>
-                    <div class="form-group" style="display: flex; align-items: flex-end;">
-                        <button type="submit" class="btn">开始回测</button>
-                    </div>
-                </form>
-                <div id="bt-result" style="margin-top: 20px;"></div>
-                <canvas id="bt-chart" class="chart-container" style="display:none;"></canvas>
+                </div>
             </div>
         </div>
 

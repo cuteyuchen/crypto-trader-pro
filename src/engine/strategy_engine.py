@@ -7,6 +7,12 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# 策略类注册
+STRATEGY_CLASSES = {
+    "ma_cross": "MovingAverageStrategy",  # 实际类名
+    "rsi": "RSIStrategy"
+}
+
 
 class KLineCache:
     """K线缓存 - 维护最近的K线数据"""
@@ -113,19 +119,35 @@ class MovingAverageStrategy:
 
 
 class StrategyEngine:
-    """策略引擎"""
+    """策略引擎 - 支持多种策略"""
 
     def __init__(self, config_path: str):
         self.config = self._load_config(config_path)
-        self.strategy = MovingAverageStrategy(self.config)
         self.kline_cache = KLineCache()
-
+        self.strategy = self._create_strategy(self.config)
         logger.info(f"策略引擎初始化: {self.strategy.name}")
 
     def _load_config(self, path: str) -> Dict[str, Any]:
         import json
         with open(path, 'r') as f:
             return json.load(f)
+
+    def _create_strategy(self, config: Dict[str, Any]):
+        """根据配置创建策略实例"""
+        # 支持多种策略
+        if "type" in config:
+            strategy_type = config["type"]
+            if strategy_type == "ma_cross":
+                from .strategies.ma_cross import MovingAverageStrategy
+                return MovingAverageStrategy(config)
+            elif strategy_type == "rsi":
+                from .strategies.rsi_strategy import RSIStrategy
+                return RSIStrategy(config)
+            else:
+                raise ValueError(f"不支持的策略类型: {strategy_type}")
+        else:
+            # 向后兼容：默认使用 MA 交叉（旧的配置格式）
+            return MovingAverageStrategy(config)
 
     async def on_kline(self, kline: Dict[str, Any]):
         """

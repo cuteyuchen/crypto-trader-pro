@@ -45,8 +45,12 @@ class TradingBot:
         with open("config/risk.json", "r") as f:
             self.risk_config = json.load(f)
 
-        with open("config/strategies/ma_cross.json", "r") as f:
+        # 从 modes.json 中读取策略配置文件名
+        strategy_name = self.mode_config.get("strategy", "ma_cross")  # 默认 ma_cross
+        strategy_file = f"config/strategies/{strategy_name}.json"
+        with open(strategy_file, "r") as f:
             self.strategy_config = json.load(f)
+        logger.info(f"加载策略配置: {strategy_file}")
 
         with open("config/simulation/local.json", "r") as f:
             self.sim_config = json.load(f)

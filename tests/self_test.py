@@ -18,15 +18,21 @@ def check_project_structure():
     required_files = [
         'src/main.py',
         'src/ws/binance_ws.py',
+        'src/ws/okx_ws.py',
         'src/engine/strategy_engine.py',
+        'src/engine/strategies/ma_cross.py',
+        'src/engine/strategies/rsi_strategy.py',
         'src/engine/executor.py',
         'src/engine/risk_manager.py',
         'src/data/simulation_db.py',
+        'src/exchange/ccxt_exchange.py',
+        'src/notifier.py',
         'src/dashboard/app.py',
         'src/dashboard/templates/index.html',
         'src/dashboard/static/app.js',
         'config/modes.json',
         'config/strategies/ma_cross.json',
+        'config/strategies/rsi.json',
         'config/risk.json',
         'config/simulation/local.json',
         'docker-compose.yml',
@@ -52,10 +58,14 @@ def check_syntax():
     py_files = [
         'src/main.py',
         'src/ws/binance_ws.py',
+        'src/engine/strategies/ma_cross.py',
+        'src/engine/strategies/rsi_strategy.py',
         'src/engine/strategy_engine.py',
         'src/engine/executor.py',
         'src/engine/risk_manager.py',
         'src/data/simulation_db.py',
+        'src/exchange/ccxt_exchange.py',
+        'src/notifier.py',
         'src/dashboard/app.py'
     ]
     errors = []

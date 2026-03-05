@@ -1,0 +1,10 @@
+{
+  "name": "RSI_14_70_30",
+  "symbol": "BTC/USDT",
+  "timeframe": "1m",
+  "type": "rsi",
+  "rsi_period": 14,
+  "oversold": 30,
+  "overbought": 70,
+  "position_size": 0.2
+}

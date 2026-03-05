@@ -61,17 +61,43 @@ OKX_TESTNET=true
 # ALL_PROXY=http://127.0.0.1:7890
 ```
 
-编辑 `config/strategies/ma_cross.json`：
+### 策略配置
 
+编辑 `config/modes.json` 选择策略：
+
+```json
+{
+  "strategy": "ma_cross"   // ma_cross | rsi
+}
+```
+
+**MA 交叉策略** (`config/strategies/ma_cross.json`)：
 ```json
 {
   "name": "MA5_MA20_Cross",
   "symbol": "BTC/USDT",
   "timeframe": "1m",
+  "type": "ma_cross",
   "params": {
     "fast_period": 5,
     "slow_period": 20
   },
+  "position_size": 0.2,
+  "stop_loss_pct": 0.05,
+  "take_profit_pct": 0.10
+}
+```
+
+**RSI 策略** (`config/strategies/rsi.json`)：
+```json
+{
+  "name": "RSI_14_70_30",
+  "symbol": "BTC/USDT",
+  "timeframe": "1m",
+  "type": "rsi",
+  "rsi_period": 14,
+  "oversold": 30,
+  "overbought": 70,
   "position_size": 0.2
 }
 ```
@@ -183,19 +209,21 @@ crypto-trader-pro/
 
 - [x] 项目骨架
 - [x] WebSocket Binance 客户端
-- [x] WebSocket OKX 客户端
+- [x] WebSocket OKX 客户端（推荐使用）
 - [x] 本地模拟数据库（持仓/余额/交易）
 - [x] 策略引擎 + MA 交叉策略
+- [x] 策略引擎 + RSI 策略 ✅
 - [x] 订单执行器（local 模式）
 - [x] 订单执行器（testnet/live 模式）✅ CCXT 集成
 - [x] 风控管理器
 - [x] Docker 部署
-- [x] Web 看板（Flask + Chart.js）✅
+- [x] Web 看板（Flask + Chart.js）✅ 移动端适配
 - [x] QQ Bot 通知集成 ✅ 通过 HEARTBEAT 自动分发
-- [ ] 更多策略（RSI、布林带、MACD）
+- [ ] 布林带策略
+- [ ] MACD 策略
 - [ ] 自改进学习集成
 
-预计完成时间：2 天
+预计完成时间：1-2 天
 
 ---
 

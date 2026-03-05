@@ -22,7 +22,9 @@ class RSIStrategy:
             "rsi_period": 14,
             "oversold": 30,
             "overbought": 70,
-            "position_size": 0.2
+            "position_size": 0.2,
+            "stop_loss_pct": 0.05,
+            "take_profit_pct": 0.10
         }
         """
         self.config = config
@@ -32,7 +34,10 @@ class RSIStrategy:
         self.oversold = config.get("oversold", 30)
         self.overbought = config.get("overbought", 70)
         self.position_size = config.get("position_size", 0.2)
-        
+        # 止损止盈配置仅用于 trader 层，策略不再使用
+        self.stop_loss_pct = config.get("stop_loss_pct", 0.05)
+        self.take_profit_pct = config.get("take_profit_pct", 0.10)
+
         self.kline_buffer = []  # 存储 K线 close 价格
         self.current_rsi = None
         self.has_position = False  # 简化：是否持有仓位（实际应从持仓查询）
@@ -73,14 +78,15 @@ class RSIStrategy:
     def check_signal(self, price: float) -> Dict[str, Any]:
         """
         检查是否产生交易信号
+        注意：止损止盈已由 Trader 统一管理，此方法只返回基于策略逻辑的买卖信号
         返回: {"action": "buy"|"sell"|"hold", "reason": "..."} 或 None（无信号）
         """
         if self.current_rsi is None:
             return {"action": "hold", "reason": "RSI 尚未计算"}
 
         rsi = self.current_rsi
-        # 注意：实际应查询当前持仓，这里使用简化状态
-        # 这里无法直接访问持仓，所以通过策略信号可能重复。外部 executor 会检查持仓。
+        # 实际应查询当前持仓，这里使用简化状态
+        # 外部 executor 会检查持仓
 
         if rsi <= self.oversold:
             return {"action": "buy", "reason": f"RSI={rsi:.1f} <= {self.oversold} (超卖)"}

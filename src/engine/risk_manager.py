@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class RiskManager:
         self.last_reset_day = datetime.now().date()
         self.cooldown_until = None  # 冷却期截止时间
 
-    def check_order(self, order_request: Dict[str, Any], current_balance: float) -> tuple[bool, str]:
+    def check_order(self, order_request: Dict[str, Any], current_balance: float) -> Tuple[bool, str]:
         """
         检查是否允许下单
 

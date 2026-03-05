@@ -18,6 +18,7 @@ class MovingAverageStrategy:
         self.fast_period = config["params"]["fast_period"]
         self.slow_period = config["params"]["slow_period"]
         self.position_size = config.get("position_size", 0.2)  # 仓位比例
+        # 止损止盈配置仅用于 trader 层，策略不再使用
         self.stop_loss_pct = config.get("stop_loss_pct", 0.05)
         self.take_profit_pct = config.get("take_profit_pct", 0.10)
 
@@ -27,6 +28,7 @@ class MovingAverageStrategy:
     def on_kline(self, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
         """
         处理新的 K 线（逐根返回信号）
+        注意：止损止盈已由 Trader 统一管理，此方法只返回基于策略逻辑的买卖信号
 
         Returns:
             None 表示无信号
@@ -54,15 +56,7 @@ class MovingAverageStrategy:
                 self.entry_price = df['close'].iloc[-1]
                 return {"action": "buy", "reason": "MA金叉"}
         elif self.state == "long":
-            current_price = df['close'].iloc[-1]
-            change = (current_price - self.entry_price) / self.entry_price
-            if change <= -self.stop_loss_pct:
-                self.state = "out"
-                return {"action": "sell", "reason": "触发止损"}
-            if change >= self.take_profit_pct:
-                self.state = "out"
-                return {"action": "sell", "reason": "达到止盈"}
-
+            # 止损止盈已由 Trader 统一检查，这里只检查策略出场信号（如死叉）
             if prev_fast >= prev_slow and curr_fast < curr_slow:
                 self.state = "out"
                 return {"action": "sell", "reason": "MA死叉"}

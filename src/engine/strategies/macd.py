@@ -44,6 +44,7 @@ class MACDStrategy:
     def on_kline(self, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
         """
         处理 K 线数据
+        注意：止损止盈已由 Trader 统一管理，此方法只返回基于策略逻辑的买卖信号
         """
         # 需要足够数据来计算 MACD
         needed = self.slow_period + self.signal_period
@@ -76,16 +77,7 @@ class MACDStrategy:
                 self.entry_price = current_price
                 return {"action": "buy", "reason": "MACD 金叉"}
         elif self.state == "long":
-            # 止损止盈
-            change = (current_price - self.entry_price) / self.entry_price
-            if change <= -self.stop_loss_pct:
-                self.state = "out"
-                return {"action": "sell", "reason": "触发止损"}
-            if change >= self.take_profit_pct:
-                self.state = "out"
-                return {"action": "sell", "reason": "达到止盈"}
-
-            # 死叉：MACD 从上往下穿过信号线
+            # 止损止盈已由 Trader 统一检查，这里只检查策略出场信号（死叉）
             if prev_macd >= prev_signal and curr_macd < curr_signal:
                 self.state = "out"
                 return {"action": "sell", "reason": "MACD 死叉"}

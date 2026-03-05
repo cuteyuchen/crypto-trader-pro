@@ -43,7 +43,7 @@ def generate_sample_trades():
         trades.append({
             'side': 'buy',
             'price': buy_price,
-            'time': buy_time,  # 直接使用 datetime 对象，避免字符串解析问题
+            'time': buy_time,
             'quantity': quantity
         })
         trades.append({
@@ -53,11 +53,6 @@ def generate_sample_trades():
             'quantity': quantity,
             'pnl': pnl
         })
-
-    print(f"[DEBUG] 生成的 trades: {len(trades)} 笔")
-    for idx, t in enumerate(trades):
-        time_val = t.get('time')
-        print(f"  [{idx}] side={t['side']}, time={time_val}, type={type(time_val)}, repr={repr(time_val)}")
 
     return trades
 
@@ -87,6 +82,11 @@ def example_with_api_response():
     """模拟与 /api/backtest 接口整合的示例"""
     equity_curve = generate_sample_equity_curve()
     trades = generate_sample_trades()
+
+    # 转换 trades 中的 datetime 为字符串，以便 JSON 序列化
+    for t in trades:
+        if isinstance(t.get('time'), datetime):
+            t['time'] = t['time'].isoformat()
 
     # 模拟 engine.run() 的结果基础信息
     result = {

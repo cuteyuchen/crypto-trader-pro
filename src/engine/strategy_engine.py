@@ -129,30 +129,73 @@ class StrategyEngine:
         self.config = config
         self.kline_cache = KLineCache()
         self.strategy = self._create_strategy(self.config)
-        logger.info(f"策略引擎初始化: {self.strategy.name}")
+        strategy_name = getattr(self.strategy, 'name', config.get('name', type(self.strategy).__name__))
+        logger.info(f"策略引擎初始化: {strategy_name}")
 
     def _create_strategy(self, config: Dict[str, Any]):
         """根据配置创建策略实例"""
         # 支持多种策略
         if "type" in config:
             strategy_type = config["type"]
-            if strategy_type == "ma_cross":
+            return self._create_strategy_by_type(strategy_type, config)
+        else:
+            # 尝试从配置参数推断策略类型
+            strategy_type = self._infer_strategy_type(config)
+            if strategy_type:
+                logger.info(f"从配置推断策略类型: {strategy_type}")
+                return self._create_strategy_by_type(strategy_type, config)
+            else:
+                # 向后兼容：默认使用 MA 交叉
+                logger.warning("无法推断策略类型，默认使用 MA 交叉策略")
                 from .strategies.ma_cross import MovingAverageStrategy
                 return MovingAverageStrategy(config)
-            elif strategy_type == "rsi":
-                from .strategies.rsi_strategy import RSIStrategy
-                return RSIStrategy(config)
-            elif strategy_type == "bollinger":
-                from .strategies.bollinger_bands import BollingerBandsStrategy
-                return BollingerBandsStrategy(config)
-            elif strategy_type == "macd":
-                from .strategies.macd import MACDStrategy
-                return MACDStrategy(config)
-            else:
-                raise ValueError(f"不支持的策略类型: {strategy_type}")
-        else:
-            # 向后兼容：默认使用 MA 交叉（旧的配置格式）
+    
+    def _create_strategy_by_type(self, strategy_type: str, config: Dict[str, Any]):
+        """根据类型创建策略"""
+        if strategy_type == "ma_cross":
+            from .strategies.ma_cross import MovingAverageStrategy
             return MovingAverageStrategy(config)
+        elif strategy_type == "rsi":
+            from .strategies.rsi_strategy import RSIStrategy
+            return RSIStrategy(config)
+        elif strategy_type == "bollinger":
+            from .strategies.bollinger_bands import BollingerBandsStrategy
+            return BollingerBandsStrategy(config)
+        elif strategy_type == "macd":
+            from .strategies.macd import MACDStrategy
+            return MACDStrategy(config)
+        else:
+            raise ValueError(f"不支持的策略类型: {strategy_type}")
+    
+    def _infer_strategy_type(self, config: Dict[str, Any]) -> Optional[str]:
+        """
+        从配置推断策略类型
+        
+        通过检测特定参数的存在来判断
+        """
+        # RSI 策略
+        if "rsi_period" in config or ("oversold" in config and "overbought" in config):
+            return "rsi"
+        
+        # MACD 策略
+        if "fast_period" in config and "slow_period" in config and "signal_period" in config:
+            return "macd"
+        
+        # 布林带策略
+        if "bb_period" in config or "bb_std" in config:
+            return "bollinger"
+        
+        # MA 交叉策略（有 fast_period 和 slow_period，但没有 signal_period）
+        if "fast_period" in config and "slow_period" in config:
+            # 检查是否有 params 嵌套
+            if "params" in config:
+                if "fast_period" in config["params"] and "slow_period" in config["params"]:
+                    return "ma_cross"
+            else:
+                # 也可能是 MA 交叉（直接参数）
+                return "ma_cross"
+        
+        return None
 
     async def on_kline(self, kline: Dict[str, Any]):
         """

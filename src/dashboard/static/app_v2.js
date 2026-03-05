@@ -40,7 +40,16 @@ function switchPage(pageId) {
         p.classList.toggle('active', p.id === pageId);
     });
     // 页面特定初始化
-    if (pageId === 'logs') fetchLogs();
+    if (pageId === 'logs') {
+        fetchLogs();
+        connectLogStream();
+    }
+    if (pageId === 'strategies') {
+        loadStrategies();
+    }
+    if (pageId === 'dashboard' || pageId === 'trades') {
+        fetchAllData();
+    }
 }
 
 // 轮询数据（概览页）
@@ -102,6 +111,31 @@ function updateTraderStats(trader) {
     document.getElementById('total-pnl').className = trader.total_pnl >= 0 ? 'positive' : 'negative';
     document.getElementById('open-positions').textContent = trader.open_trades_count;
     document.getElementById('today-trades').textContent = trader.closed_trades_count;
+
+    // 控制按钮文本与事件
+    const btn = document.getElementById('toggle-trader');
+    if (btn) {
+        btn.textContent = trader.running ? '停止' : '启动';
+        btn.onclick = async () => {
+            const action = trader.running ? 'stop' : 'start';
+            try {
+                const res = await fetch(`${API_BASE}/api/trader/control`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    setTimeout(fetchStatus, 1000); // 1秒后刷新状态
+                } else {
+                    alert('操作失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                console.error('控制交易器失败', e);
+                alert('网络错误');
+            }
+        };
+    }
 }
 
 async function fetchBalance() {
@@ -423,6 +457,115 @@ async function fetchStrategyInfo() {
         paramsDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
     } catch (e) {
         console.error('获取策略信息失败:', e);
+    }
+}
+
+// 实时日志流（SSE）
+function connectLogStream() {
+    const logDiv = document.getElementById('log-content');
+    if (!logDiv) return;
+    const evtSource = new EventSource(`${API_BASE}/api/logs/stream`);
+    evtSource.onmessage = (event) => {
+        const line = event.data;
+        logDiv.textContent += line + '\n';
+        logDiv.scrollTop = logDiv.scrollHeight;
+    };
+    evtSource.onerror = (e) => {
+        console.error('日志流断开，3秒后重连...', e);
+        setTimeout(connectLogStream, 3000);
+    };
+}
+
+// 加载并渲染策略列表（支持内联编辑）
+async function loadStrategies() {
+    try {
+        const res = await fetch(`${API_BASE}/api/strategies`);
+        const strategies = await res.json();
+        const container = document.getElementById('strategies-list');
+        container.innerHTML = '';
+        for (const strat of strategies) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.style.marginBottom = '10px';
+            // 构建参数编辑区
+            let paramsHtml = '';
+            const config = strat.config || {};
+            // 常见参数：position_size, stop_loss_pct, take_profit_pct, fast_period, slow_period, rsi_period, bb_period, bb_std 等
+            const commonParams = [
+                {key: 'position_size', label: '仓位比例', type: 'number', step: 0.01},
+                {key: 'stop_loss_pct', label: '止损%', type: 'number', step: 0.01},
+                {key: 'take_profit_pct', label: '止盈%', type: 'number', step: 0.01}
+            ];
+            // 根据策略类型添加特定参数
+            if (strat.type === 'ma_cross') {
+                commonParams.push({key: 'fast_period', label: '快线周期', type: 'number'});
+                commonParams.push({key: 'slow_period', label: '慢线周期', type: 'number'});
+            } else if (strat.type === 'rsi') {
+                commonParams.push({key: 'rsi_period', label: 'RSI周期', type: 'number'});
+                commonParams.push({key: 'oversold', label: '超卖线', type: 'number'});
+                commonParams.push({key: 'overbought', label: '超买线', type: 'number'});
+            } else if (strat.type === 'bollinger') {
+                commonParams.push({key: 'bb_period', label: '布林带周期', type: 'number'});
+                commonParams.push({key: 'bb_std', label: '标准差倍数', type: 'number', step: 0.1});
+            } else if (strat.type === 'macd') {
+                commonParams.push({key: 'fast_period', label: '快线周期', type: 'number'});
+                commonParams.push({key: 'slow_period', label: '慢线周期', type: 'number'});
+                commonParams.push({key: 'signal_period', label: '信号线周期', type: 'number'});
+            }
+            for (const param of commonParams) {
+                const val = config[param.key] !== undefined ? config[param.key] : (config.params ? config.params[param.key] : '');
+                paramsHtml += `
+                    <div class="form-group">
+                        <label>${param.label}</label>
+                        <input type="${param.type}" step="${param.step||1}" 
+                               data-strat="${strat.file}" data-param="${param.key}"
+                               value="${val}" class="strategy-param-input" style="width:100%; padding:4px;">
+                    </div>`;
+            }
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h4>${strat.name} (${strat.type})</h4>
+                    <button class="btn btn-sm save-strategy-btn" data-file="${strat.file}">保存配置</button>
+                </div>
+                <div class="strategy-params" style="margin-top:10px; display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:10px;">
+                    ${paramsHtml}
+                </div>
+                <div class="save-status" style="margin-top:5px; color: #10b981; font-size: 0.9rem;"></div>
+            `;
+            container.appendChild(card);
+        }
+        // 绑定保存按钮事件
+        document.querySelectorAll('.save-strategy-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const file = btn.dataset.file;
+                const inputs = btn.closest('.card').querySelectorAll('.strategy-param-input');
+                const newConfig = {};
+                inputs.forEach(inp => {
+                    const key = inp.dataset.param;
+                    const val = parseFloat(inp.value) || inp.value;
+                    newConfig[key] = val;
+                });
+                try {
+                    const res = await fetch(`${API_BASE}/api/strategy/config`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({file, config: newConfig})
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        btn.closest('.card').querySelector('.save-status').textContent = '✅ 已保存';
+                        setTimeout(() => btn.closest('.card').querySelector('.save-status').textContent = '', 2000);
+                    } else {
+                        alert('保存失败: ' + (result.error || '未知错误'));
+                    }
+                } catch (e) {
+                    console.error('保存策略配置失败', e);
+                    alert('网络错误');
+                }
+            });
+        });
+    } catch (e) {
+        console.error('加载策略列表失败:', e);
     }
 }
 

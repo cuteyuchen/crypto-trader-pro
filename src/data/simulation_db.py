@@ -75,7 +75,7 @@ class SimulationDB:
             conn.execute("""
                 INSERT INTO positions (symbol, side, quantity, entry_price, current_price, unrealized_pnl, created_at)
                 VALUES (?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-            """, (symbol, side, quantity, entry_price))
+            """, (symbol, side, quantity, entry_price, entry_price, 0, datetime.now()))
             conn.commit()
             logger.info(f"开仓: {symbol} {side} {quantity} @ ${entry_price:.2f}")
 

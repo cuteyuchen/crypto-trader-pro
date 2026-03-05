@@ -33,6 +33,7 @@ class BollingerBandsStrategy:
         self.bb_period = config.get("bb_period", 20)
         self.bb_std = config.get("bb_std", 2.0)
         self.position_size = config.get("position_size", 0.2)
+        # 止损止盈配置仅用于 trader 层，策略不再使用
         self.stop_loss_pct = config.get("stop_loss_pct", 0.05)
         self.take_profit_pct = config.get("take_profit_pct", 0.10)
 
@@ -43,6 +44,7 @@ class BollingerBandsStrategy:
     def on_kline(self, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
         """
         处理 K 线数据
+        注意：止损止盈已由 Trader 统一管理，此方法只返回基于策略逻辑的买卖信号
         """
         if len(df) < self.bb_period:
             return None
@@ -65,16 +67,7 @@ class BollingerBandsStrategy:
                 self.entry_price = current_price
                 return {"action": "buy", "reason": f"价格触及布林带下轨 (价格={current_price:.2f}, 下轨={lower:.2f})"}
         elif self.state == "long":
-            # 检查止损止盈
-            change = (current_price - self.entry_price) / self.entry_price
-            if change <= -self.stop_loss_pct:
-                self.state = "out"
-                return {"action": "sell", "reason": "触发止损"}
-            if change >= self.take_profit_pct:
-                self.state = "out"
-                return {"action": "sell", "reason": "达到止盈"}
-
-            # 价格触及上轨卖出
+            # 止损止盈已由 Trader 统一检查，这里只检查策略出场信号（如上轨）
             if current_price >= upper:
                 self.state = "out"
                 return {"action": "sell", "reason": f"价格触及布林带上轨 (价格={current_price:.2f}, 上轨={upper:.2f})"}

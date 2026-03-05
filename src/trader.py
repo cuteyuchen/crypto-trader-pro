@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class Trade:
     """交易对象"""
 
-    def __init__(self, trade_id: str, symbol: str, side: str, quantity: float, entry_price: float, strategy: str):
+    def __init__(self, trade_id: str, symbol: str, side: str, quantity: float, entry_price: float, strategy: str, stop_loss_price: float = None, take_profit_price: float = None):
         self.id = trade_id
         self.symbol = symbol
         self.side = side  # 'long' 或 'short'（目前只支持 long）
@@ -28,6 +28,8 @@ class Trade:
         self.opened_at = datetime.now()
         self.closed_at = None
         self.status = "open"  # open | closed
+        self.stop_loss_price = stop_loss_price  # 止损触发价
+        self.take_profit_price = take_profit_price  # 止盈触发价
 
     def update_price(self, price: float):
         """更新当前价格并计算未实现盈亏"""
@@ -69,6 +71,7 @@ class Trader:
         self.open_trades: List[Trade] = []
         self.closed_trades: List[Trade] = []
         self.strategy_engine = None  # 稍后注入
+        self._lock = asyncio.Lock()  # 保护 open_trades 列表的线程安全
 
         # 统计
         self.total_pnl = 0.0
@@ -110,16 +113,21 @@ class Trader:
             return
 
         # 更新持仓的未实现盈亏
-        for trade in self.open_trades:
-            trade.update_price(price)
+        async with self._lock:
+            for trade in self.open_trades:
+                trade.update_price(price)
+
+        # 先检查止损/止盈条件（优先级高于开仓信号）
+        await self._check_stop_conditions(price)
 
         # 如果自动交易关闭，跳过
         if not self.auto_trade:
             return
 
-        # 检查是否还能开新仓
-        if len(self.open_trades) >= self.max_open_trades:
-            return
+        # 检查是否还能开新仓（注意：_check_stop_conditions 可能会减少持仓）
+        async with self._lock:
+            if len(self.open_trades) >= self.max_open_trades:
+                return
 
         # 获取策略信号
         signal = self.strategy_engine.strategy.check_signal(price)
@@ -129,11 +137,48 @@ class Trader:
         # 执行买入
         if signal['action'] == 'buy':
             await self._execute_buy(price, signal['reason'])
-        # 执行卖出（仅当有持仓时）
-        elif signal['action'] == 'sell' and self.open_trades:
-            # 平掉所有多头（简化：只平仓最早的一笔）
-            trade = self.open_trades[0]
-            await self._execute_sell(trade, price, signal['reason'])
+        # 执行卖出（仅当有持仓时）- 注意：这里的卖出主要是策略主动平仓（非止损止盈）
+        elif signal['action'] == 'sell':
+            async with self._lock:
+                if self.open_trades:
+                    # 平掉所有多头（简化：只平仓最早的一笔）
+                    trade = self.open_trades[0]
+            if self.open_trades:
+                await self._execute_sell(trade, price, signal['reason'])
+
+    async def _check_stop_conditions(self, price: float):
+        """
+        检查所有持仓的止损/止盈条件
+
+        这是一个独立的检查，优先级高于策略信号
+        """
+        async with self._lock:
+            # 复制一份 open_trades 列表，避免在遍历时修改原列表导致的并发问题
+            trades_to_check = list(self.open_trades)
+
+        for trade in trades_to_check:
+            # 如果交易没有设置止损止盈价格，跳过
+            if trade.stop_loss_price is None and trade.take_profit_price is None:
+                continue
+
+            stop_loss_triggered = False
+            take_profit_triggered = False
+
+            if trade.stop_loss_price is not None and price <= trade.stop_loss_price:
+                stop_loss_triggered = True
+
+            if trade.take_profit_price is not None and price >= trade.take_profit_price:
+                take_profit_triggered = True
+
+            # 如果同时触发（理论上不可能，除非价格正好等于两个阈值），优先止损
+            if stop_loss_triggered:
+                reason = "止损触发"
+                logger.info(f"触发止损: trade={trade.id}, price={price}, stop_loss_price={trade.stop_loss_price}")
+                await self._execute_sell(trade, price, reason)
+            elif take_profit_triggered:
+                reason = "止盈触发"
+                logger.info(f"触发止盈: trade={trade.id}, price={price}, take_profit_price={trade.take_profit_price}")
+                await self._execute_sell(trade, price, reason)
 
     def _get_latest_price(self) -> Optional[float]:
         """获取最新价格"""
@@ -171,18 +216,35 @@ class Trader:
 
         result = await self.executor.execute_order(order)
         if result['success']:
+            # 计算止损止盈价格（基于买入成交价）
+            entry_price = result.get('avg_price', price)
+            strategy_config = self.strategy_engine.config
+            stop_loss_pct = strategy_config.get('stop_loss_pct')
+            take_profit_pct = strategy_config.get('take_profit_pct')
+
+            stop_loss_price = None
+            take_profit_price = None
+
+            if stop_loss_pct is not None:
+                stop_loss_price = entry_price * (1 - stop_loss_pct)
+            if take_profit_pct is not None:
+                take_profit_price = entry_price * (1 + take_profit_pct)
+
             trade = Trade(
                 trade_id=result.get('order_id', f"local_{datetime.now().timestamp()}"),
                 symbol=symbol,
                 side='long',
                 quantity=result.get('filled_quantity', quantity),
-                entry_price=result.get('avg_price', price),
-                strategy=order['strategy']
+                entry_price=entry_price,
+                strategy=order['strategy'],
+                stop_loss_price=stop_loss_price,
+                take_profit_price=take_profit_price
             )
-            self.open_trades.append(trade)
-            logger.info(f"买入成功: {trade}")
+            async with self._lock:
+                self.open_trades.append(trade)
+            logger.info(f"买入成功: {trade} (止损价: {stop_loss_price}, 止盈价: {take_profit_price})")
             if self.notifier:
-                self.notifier.send("open_position", "开仓买入", f"{symbol} 买入 {trade.quantity:.6f} @ ${trade.entry_price:.2f}\n原因: {reason}", {"trade_id": trade.id, "price": trade.entry_price})
+                self.notifier.send("open_position", "开仓买入", f"{symbol} 买入 {trade.quantity:.6f} @ ${trade.entry_price:.2f}\n止损价: ${stop_loss_price:.2f if stop_loss_price else '未设置'}\n止盈价: ${take_profit_price:.2f if take_profit_price else '未设置'}\n原因: {reason}", {"trade_id": trade.id, "price": trade.entry_price, "stop_loss_price": stop_loss_price, "take_profit_price": take_profit_price})
         else:
             logger.error(f"买入失败: {result.get('error')}")
 
@@ -201,8 +263,11 @@ class Trader:
         result = await self.executor.execute_order(order)
         if result['success']:
             pnl = trade.close(result.get('avg_price', price), result.get('fee', 0.0))
-            self.open_trades.remove(trade)
-            self.closed_trades.append(trade)
+            # 使用锁保护列表修改操作
+            async with self._lock:
+                if trade in self.open_trades:
+                    self.open_trades.remove(trade)
+                self.closed_trades.append(trade)
             self.total_pnl += pnl
             if pnl > 0:
                 self.win_count += 1
@@ -211,7 +276,11 @@ class Trader:
             logger.info(f"卖出成功: {trade} 盈亏 ${pnl:.2f}")
             if self.notifier:
                 pnl_str = f"+${pnl:.2f}" if pnl >= 0 else f"-${abs(pnl):.2f}"
-                self.notifier.send("close_position", "平仓卖出", f"{symbol} 卖出 {trade.quantity:.6f} @ ${result.get('avg_price'):.2f}\n盈亏: {pnl_str}\n原因: {reason}", {"trade_id": trade.id, "pnl": pnl})
+                reason_display = reason
+                # 如果是策略信号卖出，显示原始原因；如果是止损止盈，特别标注
+                if reason in ["止损触发", "止盈触发"]:
+                    reason_display = f"【{reason}】"
+                self.notifier.send("close_position", "平仓卖出", f"{symbol} 卖出 {trade.quantity:.6f} @ ${result.get('avg_price'):.2f}\n盈亏: {pnl_str}\n原因: {reason_display}", {"trade_id": trade.id, "pnl": pnl, "reason": reason})
         else:
             logger.error(f"卖出失败: {result.get('error')}")
 

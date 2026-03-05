@@ -480,6 +480,45 @@ class Dashboard:
                 logger.exception("策略重载失败")
                 return jsonify({'success': False, 'error': str(e)}), 500
 
+        @self.app.route('/api/strategy/config', methods=['POST'])
+        def update_strategy_config():
+            """更新策略配置文件中的参数，并自动重载"""
+            bot = self.trading_bot
+            req = request.get_json()
+            file = req.get('file')  # e.g., "ma_cross.json"
+            new_config = req.get('config', {})
+            if not file:
+                return jsonify({'success': False, 'error': '缺少 file 参数'}), 400
+
+            # 定位策略文件
+            config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'strategies')
+            file_path = os.path.join(config_dir, file)
+            if not os.path.exists(file_path):
+                return jsonify({'success': False, 'error': f'策略文件不存在: {file}'}), 404
+
+            try:
+                # 读取现有配置
+                with open(file_path, 'r') as f:
+                    cfg = json.load(f)
+                # 合并更新（简单策略：直接更新顶层；如果是 params，合并到 params 对象）
+                for key, value in new_config.items():
+                    # 如果原配置有 params 字段，且 key 在 params 中，则更新 params
+                    if 'params' in cfg and key in cfg['params']:
+                        cfg['params'][key] = value
+                    else:
+                        cfg[key] = value
+                # 写回文件
+                with open(file_path, 'w') as f:
+                    json.dump(cfg, f, indent=2, ensure_ascii=False)
+                # 自动重载策略（全局重载）
+                bot.load_config()
+                bot.strategy_engine = StrategyEngine(bot.strategy_config)
+                bot.strategy_engine.set_signal_callback(bot.on_signal)
+                return jsonify({'success': True, 'message': f'策略配置已更新并重载'})
+            except Exception as e:
+                logger.exception("更新策略配置失败")
+                return jsonify({'success': False, 'error': str(e)}), 500
+
         @self.app.route('/api/config', methods=['GET', 'POST'])
         def handle_config():
             """获取或更新 modes 配置（注意：修改后需重启或调用 /api/strategy/reload）"""
@@ -538,8 +577,41 @@ class Dashboard:
 
         @self.app.route('/api/logs')
         def get_logs():
-            """获取容器日志（简化版）"""
-            return jsonify({'logs': '请使用 `docker logs crypto-trader-pro` 查看完整日志。\n此功能待实现。'})
+            """获取日志文件 tail（非 SSE）"""
+            log_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'logs', 'latest.log')
+            if not os.path.exists(log_file):
+                return jsonify({'logs': 'No logs yet'})
+            with open(log_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()[-100:]  # 最后 100 行
+            return jsonify({'logs': ''.join(lines)})
+
+        @self.app.route('/api/logs/stream')
+        def stream_logs():
+            """SSE 实时日志流"""
+            log_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'logs', 'latest.log')
+            def generate():
+                # 初始发送最后 10 行
+                if os.path.exists(log_file):
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                        for line in lines[-10:]:
+                            yield f"data: {line.strip()}\n\n"
+                # 持续监听文件新增内容
+                last_size = os.path.getsize(log_file) if os.path.exists(log_file) else 0
+                while True:
+                    if not os.path.exists(log_file):
+                        time.sleep(1)
+                        continue
+                    current_size = os.path.getsize(log_file)
+                    if current_size > last_size:
+                        with open(log_file, 'r', encoding='utf-8') as f:
+                            f.seek(last_size)
+                            for line in f:
+                                yield f"data: {line.strip()}\n\n"
+                        last_size = current_size
+                    else:
+                        time.sleep(0.5)
+            return Response(generate(), mimetype='text/event-stream')
 
         @self.app.route('/health')
         def health():

@@ -1,11 +1,12 @@
 import os
+import json
 import asyncio
 from flask import Flask, jsonify, render_template, request, Response
 from flask_cors import CORS
 import logging
 import sqlite3
 from datetime import datetime
-from .auth import require_auth, authenticate
+from subprocess import run, PIPE
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +256,91 @@ class Dashboard:
             except Exception as e:
                 logger.exception("手动下单异常")
                 return jsonify({'success': False, 'error': str(e)}), 500
+
+        @self.app.route('/api/strategies')
+        def list_strategies():
+            """列出所有可用策略配置"""
+            import os, json, glob
+            base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'strategies')
+            files = glob.glob(os.path.join(base_path, '*.json'))
+            strategies = []
+            for f in files:
+                try:
+                    with open(f, 'r') as fp:
+                        cfg = json.load(fp)
+                        strategies.append({
+                            'name': cfg.get('name', os.path.splitext(os.path.basename(f))[0]),
+                            'type': cfg.get('type', os.path.splitext(os.path.basename(f))[0]),
+                            'file': os.path.basename(f),
+                            'config': cfg
+                        })
+                except Exception as e:
+                    logger.warning(f"读取策略配置失败 {f}: {e}")
+            return jsonify(strategies)
+
+        @self.app.route('/api/strategy/reload', methods=['POST'])
+        def reload_strategy():
+            """热重载策略配置（从文件重新加载）"""
+            bot = self.trading_bot
+            try:
+                bot.load_config()  # 重新加载 modes.json 和策略配置
+                bot.strategy_engine = StrategyEngine(bot.strategy_config)
+                bot.strategy_engine.set_signal_callback(bot.on_signal)
+                return jsonify({'success': True, 'message': f'策略已重载: {bot.strategy_config.get("name")}'})
+            except Exception as e:
+                logger.exception("策略重载失败")
+                return jsonify({'success': False, 'error': str(e)}), 500
+
+        @self.app.route('/api/config', methods=['GET', 'POST'])
+        def handle_config():
+            """获取或更新 modes 配置（注意：修改后需重启或调用 /api/strategy/reload）"""
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'modes.json')
+            if request.method == 'GET':
+                try:
+                    with open(config_path, 'r') as f:
+                        cfg = json.load(f)
+                    return jsonify(cfg)
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            else:
+                try:
+                    new_cfg = request.get_json()
+                    with open(config_path, 'w') as f:
+                        json.dump(new_cfg, f, indent=2)
+                    return jsonify({'success': True, 'message': '配置已保存，请重启或调用重载'})
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/backtest', methods=['POST'])
+        def run_backtest():
+            """运行回测（简化版）"""
+            bot = self.trading_bot
+            try:
+                req = request.get_json()
+                strategy_file = req.get('strategy', bot.strategy_config.get('type', 'ma_cross'))
+                days = int(req.get('days', 30))
+                initial = float(req.get('initial_balance', bot.sim_config.get('initial_balance', 10000)))
+                # 加载策略配置
+                import os, json
+                base = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'strategies')
+                config_path = os.path.join(base, f'{strategy_file}.json')
+                if not os.path.exists(config_path):
+                    return jsonify({'error': f'策略配置不存在: {strategy_file}'}), 404
+                with open(config_path, 'r') as f:
+                    strategy_cfg = json.load(f)
+                # 运行回测
+                from src.backtest.engine import BacktestEngine
+                engine = BacktestEngine(strategy_cfg, initial_balance=initial)
+                result = engine.run(days=days)
+                return jsonify(result)
+            except Exception as e:
+                logger.exception("回测失败")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/logs')
+        def get_logs():
+            """获取容器日志（简化版）"""
+            return jsonify({'logs': '请使用 `docker logs crypto-trader-pro` 查看完整日志。\n此功能待实现。'})
 
         @self.app.route('/health')
         def health():

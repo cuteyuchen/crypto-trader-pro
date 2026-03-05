@@ -1,331 +1,264 @@
 /**
- * Crypto Trader Pro - Dashboard Frontend
- * 轮询 API，实时更新数据
+ * Crypto Trader Pro - Dashboard Frontend (SPA)
+ * 多页面路由 + API 调用
  */
 
-// 配置
-const API_BASE = ''; // 相对路径
-const REFRESH_INTERVAL = 5000; // 5秒
+const API_BASE = '';
+const REFRESH_INTERVAL = 5000;
 
-// 全局变量
-let balanceChart = null;
-let balanceHistory = []; // 存储余额历史 [{time: string, balance: number}]
+let balanceHistory = [];
+let chartInstance = null;
 
-// 页面加载完成后启动轮询
+// 页面路由
 document.addEventListener('DOMContentLoaded', () => {
+    initRouter();
     startPolling();
+    fetchAllData();
+    bindEvents();
 });
 
-/**
- * 启动定时轮询
- */
+function initRouter() {
+    const links = document.querySelectorAll('.nav-links a');
+    const pages = document.querySelectorAll('.page');
+
+    links.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const pageId = link.getAttribute('data-page');
+            switchPage(pageId);
+        });
+    });
+}
+
+function switchPage(pageId) {
+    // 更新导航激活状态
+    document.querySelectorAll('.nav-links a').forEach(a => {
+        a.classList.toggle('active', a.getAttribute('data-page') === pageId);
+    });
+    // 显示对应页面
+    document.querySelectorAll('.page').forEach(p => {
+        p.classList.toggle('active', p.id === pageId);
+    });
+    // 页面特定初始化
+    if (pageId === 'logs') fetchLogs();
+}
+
+// 轮询数据（概览页）
 function startPolling() {
-    fetchData(); // 立即 fetch 一次
-    setInterval(fetchData, REFRESH_INTERVAL);
+    setInterval(() => {
+        if (document.getElementById('dashboard').classList.contains('active')) {
+            fetchAllData();
+        }
+    }, REFRESH_INTERVAL);
 }
 
-/**
- * 统一 fetch 所有数据
- */
-async function fetchData() {
-    try {
-        await Promise.all([
-            fetchStatus(),
-            fetchBalance(),
-            fetchPositions(),
-            fetchTrades(),
-            fetchDailyPnl(),
-            fetchStrategyStatus()
-        ]);
-        updateLastUpdateTime();
-    } catch (error) {
-        console.error('获取数据失败:', error);
-    }
+async function fetchAllData() {
+    await Promise.all([
+        fetchStatus(),
+        fetchBalance(),
+        fetchPositions(),
+        fetchTrades(),
+        fetchDailyPnl()
+    ]);
+    updateLastUpdateTime();
 }
 
-/**
- * 获取运行状态
- */
+function showLoading(id) {
+    const el = document.getElementById(id + '-loading');
+    const table = document.getElementById(id + '-table');
+    const empty = document.getElementById(id + '-empty');
+    if (el) el.style.display = 'block';
+    if (table) table.style.display = 'none';
+    if (empty) empty.style.display = 'none';
+}
+
+function hideLoading(id, hasData) {
+    const el = document.getElementById(id + '-loading');
+    const table = document.getElementById(id + '-table');
+    const empty = document.getElementById(id + '-empty');
+    if (el) el.style.display = 'none';
+    if (table) table.style.display = hasData ? 'table' : 'none';
+    if (empty) empty.style.display = hasData ? 'none' : 'block';
+}
+
 async function fetchStatus() {
     try {
         const res = await fetch(`${API_BASE}/api/status`);
         const data = await res.json();
-        
-        document.getElementById('mode').textContent = data.mode;
-        document.getElementById('running').textContent = data.running ? '✅ 运行中' : '⏸ 已停止';
-        document.getElementById('initial-balance').textContent = `$${data.initial_balance.toFixed(2)}`;
+        document.getElementById('status-mode').textContent = data.mode;
+        document.getElementById('status-running').textContent = data.running ? '✅ 运行中' : '⏸ 已停止';
+        // 获取策略名
+        const stratRes = await fetch(`${API_BASE}/api/strategy`);
+        const stratData = await stratRes.json();
+        document.getElementById('status-strategy').textContent = stratData.name || '-';
+        document.getElementById('status-kline').textContent = stratData.kline_count || '-';
     } catch (e) {
         console.error('获取状态失败:', e);
     }
 }
 
-/**
- * 获取余额
- */
 async function fetchBalance() {
     try {
         const res = await fetch(`${API_BASE}/api/balance`);
         const data = await res.json();
-        const balance = data.USDT || 0;
-        
-        const el = document.getElementById('balance');
-        const loading = document.getElementById('balance-loading');
-        loading.style.display = 'none';
-        el.textContent = `$${balance.toFixed(2)}`;
-        
-        // 记录余额历史
+        const usdt = data.USDT || 0;
+        document.getElementById('balance').textContent = `$${usdt.toFixed(2)}`;
+        document.getElementById('balance2').textContent = `$${usdt.toFixed(2)}`;
+        // 记录图表数据
         const now = new Date();
-        balanceHistory.push({
-            time: now.toLocaleTimeString(),
-            balance: balance
-        });
-        // 只保留最近 20 个点
-        if (balanceHistory.length > 20) {
-            balanceHistory.shift();
-        }
+        balanceHistory.push({ time: now.toLocaleTimeString(), balance: usdt });
+        if (balanceHistory.length > 20) balanceHistory.shift();
         updateBalanceChart();
     } catch (e) {
         console.error('获取余额失败:', e);
     }
 }
 
-/**
- * 获取持仓
- */
 async function fetchPositions() {
+    showLoading('positions');
     try {
         const res = await fetch(`${API_BASE}/api/positions`);
         const positions = await res.json();
-        
-        const table = document.getElementById('positions-table');
-        const empty = document.getElementById('positions-empty');
-        const loading = document.getElementById('positions-loading');
         const tbody = document.getElementById('positions-body');
-        
-        loading.style.display = 'none';
-        
         if (positions.length === 0) {
-            table.style.display = 'none';
-            empty.style.display = 'block';
+            hideLoading('positions', false);
         } else {
-            table.style.display = 'table';
-            empty.style.display = 'none';
-            
             tbody.innerHTML = positions.map(pos => {
                 const sideClass = pos.side === 'long' ? 'positive' : 'negative';
                 const sideText = pos.side === 'long' ? '多' : '空';
                 const upnlClass = pos.unrealized_pnl >= 0 ? 'positive' : 'negative';
-                const upnlText = pos.unrealized_pnl >= 0 ? `+$${pos.unrealized_pnl.toFixed(2)}` : `-$${Math.abs(pos.unrealized_pnl).toFixed(2)}`;
-                const createdAt = new Date(pos.created_at).toLocaleString();
-                
+                const upnlText = pos.unrealized_pnl >= 0 ? `+${pos.unrealized_pnl.toFixed(2)}` : `${pos.unrealized_pnl.toFixed(2)}`;
                 return `
                     <tr>
                         <td>${pos.symbol}</td>
                         <td class="${sideClass}">${sideText}</td>
                         <td>${pos.quantity.toFixed(6)}</td>
-                        <td>$${pos.entry_price.toFixed(2)}</td>
-                        <td>$${pos.current_price.toFixed(2)}</td>
-                        <td class="${upnlClass}">${upnlText}</td>
-                        <td>${createdAt}</td>
+                        <td>${pos.entry_price.toFixed(2)}</td>
+                        <td>${pos.current_price.toFixed(2)}</td>
+                        <td class="${upnlClass}">$${upnlText}</td>
                     </tr>
                 `;
             }).join('');
+            hideLoading('positions', true);
         }
     } catch (e) {
         console.error('获取持仓失败:', e);
+        hideLoading('positions', false);
     }
 }
 
-/**
- * 获取最近交易
- */
 async function fetchTrades() {
+    showLoading('trades');
     try {
         const res = await fetch(`${API_BASE}/api/trades?limit=10`);
         const trades = await res.json();
-        
-        const table = document.getElementById('trades-table');
-        const empty = document.getElementById('trades-empty');
-        const loading = document.getElementById('trades-loading');
         const tbody = document.getElementById('trades-body');
-        
-        loading.style.display = 'none';
-        
         if (trades.length === 0) {
-            table.style.display = 'none';
-            empty.style.display = 'block';
+            hideLoading('trades', false);
         } else {
-            table.style.display = 'table';
-            empty.style.display = 'none';
-            
             tbody.innerHTML = trades.map(trade => {
                 const sideClass = trade.side === 'buy' ? 'positive' : 'negative';
                 const sideText = trade.side === 'buy' ? '买入' : '卖出';
                 const pnl = trade.pnl || 0;
                 const pnlClass = pnl >= 0 ? 'positive' : 'negative';
-                const pnlText = pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
-                const executedAt = new Date(trade.executed_at).toLocaleString();
-                
+                const pnlText = pnl >= 0 ? `+${pnl.toFixed(2)}` : `${pnl.toFixed(2)}`;
+                const time = trade.executed_at ? new Date(trade.executed_at).toLocaleString() : '-';
                 return `
                     <tr>
-                        <td>${executedAt}</td>
+                        <td>${time}</td>
                         <td>${trade.symbol}</td>
                         <td class="${sideClass}">${sideText}</td>
                         <td>${trade.quantity.toFixed(6)}</td>
-                        <td>$${trade.price.toFixed(2)}</td>
-                        <td>$${trade.fee.toFixed(4)}</td>
-                        <td class="${pnlClass}">${pnlText}</td>
+                        <td>${trade.price.toFixed(2)}</td>
+                        <td class="${pnlClass}">$${pnlText}</td>
                     </tr>
                 `;
             }).join('');
+            hideLoading('trades', true);
         }
     } catch (e) {
         console.error('获取交易失败:', e);
+        hideLoading('trades', false);
     }
 }
 
-/**
- * 获取今日盈亏
- */
 async function fetchDailyPnl() {
     try {
         const res = await fetch(`${API_BASE}/api/pnl/daily`);
         const data = await res.json();
         const pnl = data.total_pnl || 0;
-        
         const el = document.getElementById('daily-pnl');
-        const loading = document.getElementById('pnl-loading');
-        loading.style.display = 'none';
-        
-        const isPositive = pnl >= 0;
-        el.className = isPositive ? 'positive' : 'negative';
-        el.textContent = `${isPositive ? '+' : ''}$${pnl.toFixed(2)}`;
+        const isPos = pnl >= 0;
+        el.className = isPos ? 'positive' : 'negative';
+        el.textContent = `${isPos ? '+' : ''}$${pnl.toFixed(2)}`;
     } catch (e) {
         console.error('获取盈亏失败:', e);
     }
 }
 
-/**
- * 获取策略状态
- */
-async function fetchStrategyStatus() {
-    try {
-        const res = await fetch(`${API_BASE}/api/strategy`);
-        const data = await res.json();
-        
-        document.getElementById('strategy-state').textContent = data.state || '-';
-        document.getElementById('kline-count').textContent = data.kline_count || '-';
-    } catch (e) {
-        console.error('获取策略状态失败:', e);
-    }
-}
-
-/**
- * 更新最后刷新时间
- */
-function updateLastUpdateTime() {
-    const now = new Date();
-    document.getElementById('last-update').textContent = now.toLocaleTimeString();
-}
-
-/**
- * 更新余额走势图
- */
 function updateBalanceChart() {
     const ctx = document.getElementById('balanceChart').getContext('2d');
-    
-    const labels = balanceHistory.map(item => item.time);
-    const data = balanceHistory.map(item => item.balance);
-    
-    if (balanceChart) {
-        balanceChart.data.labels = labels;
-        balanceChart.data.datasets[0].data = data;
-        balanceChart.update('none'); // 无动画更新
+    const labels = balanceHistory.map(h => h.time);
+    const data = balanceHistory.map(h => h.balance);
+
+    if (chartInstance) {
+        chartInstance.data.labels = labels;
+        chartInstance.data.datasets[0].data = data;
+        chartInstance.update('none');
     } else {
-        balanceChart = new Chart(ctx, {
+        chartInstance = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: labels,
+                labels,
                 datasets: [{
                     label: 'USDT 余额',
-                    data: data,
+                    data,
                     borderColor: '#667eea',
-                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    backgroundColor: 'rgba(102,126,234,0.1)',
                     fill: true,
                     tension: 0.3,
-                    pointRadius: 4,
-                    pointHoverRadius: 6
+                    pointRadius: 3
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    },
-                    y: {
-                        grid: {
-                            color: 'rgba(0,0,0,0.05)'
-                        }
-                    }
-                }
+                plugins: { legend: { display: false } },
+                scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(0,0,0,0.05)' } } }
             }
         });
     }
 }
 
-/**
- * 交易表单提交
- */
-document.addEventListener('DOMContentLoaded', () => {
+// 交易表单
+function bindEvents() {
+    // 交易表单
     const form = document.getElementById('trade-form');
     const resultDiv = document.getElementById('trade-result');
-    
     if (form) {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const symbol = document.getElementById('trade-symbol').value;
             const side = document.getElementById('trade-side').value;
             const quantity = parseFloat(document.getElementById('trade-quantity').value);
-            const type = document.getElementById('trade-type').value;
-            
             if (!quantity || quantity <= 0) {
                 resultDiv.textContent = '❌ 请输入有效的数量';
                 resultDiv.style.color = '#ef4444';
                 return;
             }
-            
             resultDiv.textContent = '⏳ 提交中...';
             resultDiv.style.color = '#333';
-            
             try {
-                const response = await fetch('/api/order', {
+                const resp = await fetch(`${API_BASE}/api/order`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        symbol,
-                        side,
-                        quantity,
-                        type
-                    })
+                    body: JSON.stringify({ side, quantity })
                 });
-                const data = await response.json();
-                if (response.ok && data.success) {
-                    resultDiv.innerHTML = `✅ 订单已提交<br>订单ID: ${data.order_id}<br>成交均价: $${data.avg_price.toFixed(2)}<br>数量: ${data.filled_quantity}<br>手续费: $${data.fee.toFixed(4)}`;
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    resultDiv.innerHTML = `✅ 订单成功<br>ID: ${data.order_id}<br>成交均价: $${data.avg_price.toFixed(2)}<br>数量: ${data.filled_quantity}<br>手续费: $${data.fee.toFixed(4)}`;
                     resultDiv.style.color = '#10b981';
                     form.reset();
-                    // 3秒后刷新数据
-                    setTimeout(() => {
-                        fetchData();
-                    }, 3000);
+                    setTimeout(fetchAllData, 2000);
                 } else {
                     resultDiv.innerHTML = `❌ 下单失败: ${data.error || '未知错误'}`;
                     resultDiv.style.color = '#ef4444';
@@ -336,4 +269,166 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // 策略重载按钮
+    document.getElementById('reload-strategy-btn')?.addEventListener('click', async () => {
+        const statusDiv = document.getElementById('strategy-status');
+        statusDiv.textContent = '重载中...';
+        try {
+            const resp = await fetch(`${API_BASE}/api/strategy/reload`, { method: 'POST' });
+            const data = await resp.json();
+            if (resp.ok) {
+                statusDiv.textContent = `✅ ${data.message}`;
+                fetchStrategyInfo();
+            } else {
+                statusDiv.textContent = `❌ ${data.error}`;
+            }
+        } catch (e) {
+            statusDiv.textContent = `❌ 网络错误`;
+        }
+    });
+
+    // 保存设置按钮
+    document.getElementById('save-settings-btn')?.addEventListener('click', async () => {
+        const exchange = document.getElementById('setting-exchange').value;
+        const notify = document.getElementById('setting-notify').value;
+        const statusDiv = document.getElementById('settings-status');
+        try {
+            const resp = await fetch(`${API_BASE}/api/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ exchange, notifications_enabled: notify === 'true' })
+            });
+            const data = await resp.json();
+            statusDiv.textContent = resp.ok ? `✅ ${data.message}` : `❌ ${data.error}`;
+        } catch (e) {
+            statusDiv.textContent = `❌ 网络错误`;
+        }
+    });
+
+    // 回测表单
+    const backtestForm = document.getElementById('backtest-form');
+    if (backtestForm) {
+        backtestForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resultDiv = document.getElementById('backtest-result');
+            resultDiv.textContent = '⏳ 回测进行中...';
+            try {
+                const strategy = document.getElementById('backtest-strategy').value;
+                const days = parseInt(document.getElementById('backtest-days').value);
+                const initial = parseFloat(document.getElementById('backtest-initial').value);
+                const resp = await fetch(`${API_BASE}/api/backtest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy, days, initial_balance: initial })
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    resultDiv.innerHTML = `
+                        <p><strong>策略:</strong> ${data.strategy}</p>
+                        <p><strong>初始/最终资产:</strong> $${data.initial_balance} → $${data.final_equity.toFixed(2)}</p>
+                        <p><strong>总收益率:</strong> ${data.total_return_pct}%</p>
+                        <p><strong>最大回撤:</strong> ${data.max_drawdown_pct}%</p>
+                        <p><strong>交易笔数:</strong> ${data.trades_count}</p>
+                    `;
+                    // 绘制资金曲线
+                    renderEquityChart(data.equity_curve);
+                } else {
+                    resultDiv.innerHTML = `❌ 回测失败: ${data.error || '未知错误'}`;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `❌ 网络错误: ${err.message}`;
+            }
+        });
+    }
+}
+
+// 绘制资金曲线
+function renderEquityChart(equityData) {
+    const canvas = document.getElementById('backtestChart');
+    if (!canvas) return;
+    canvas.style.display = 'block';
+    const ctx = canvas.getContext('2d');
+    const labels = equityData.map(d => new Date(d.time).toLocaleDateString());
+    const data = equityData.map(d => d.equity);
+    if (window.backtestChart) window.backtestChart.destroy();
+    window.backtestChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: '资产 (USDT)',
+                data,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16,185,129,0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: true } },
+            scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(0,0,0,0.05)' } } }
+        }
+    });
+}
+
+// 页面加载时额外获取数据
+async function fetchStrategyInfo() {
+    try {
+        const res = await fetch(`${API_BASE}/api/strategy`);
+        const data = await res.json();
+        document.getElementById('current-strategy-name').textContent = data.name || '-';
+        const paramsDiv = document.getElementById('strategy-params');
+        paramsDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    } catch (e) {
+        console.error('获取策略信息失败:', e);
+    }
+}
+
+// 日志轮询（切换到日志页时启动）
+let logPolling = null;
+function startLogPolling() {
+    if (logPolling) clearInterval(logPolling);
+    logPolling = setInterval(fetchLogs, 3000);
+}
+document.addEventListener('DOMContentLoaded', () => {
+    // 监听页面切换
+    const observer = new MutationObserver(() => {
+        const logsPage = document.getElementById('logs');
+        if (logsPage.classList.contains('active')) {
+            fetchLogs();
+            startLogPolling();
+        } else {
+            clearInterval(logPolling);
+        }
+    });
+    observer.observe(document.body, { attributes: true, childList: true, subtree: true });
 });
+
+async function fetchStrategyInfo() {
+    try {
+        const res = await fetch(`${API_BASE}/api/strategy`);
+        const data = await res.json();
+        document.getElementById('current-strategy-name').textContent = data.name || '-';
+        const paramsDiv = document.getElementById('strategy-params');
+        paramsDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    } catch (e) {
+        console.error('获取策略信息失败:', e);
+    }
+}
+
+async function fetchLogs() {
+    try {
+        const res = await fetch(`${API_BASE}/api/logs?lines=200`);
+        const data = await res.json();
+        document.getElementById('log-content').textContent = data.logs || '暂无日志';
+    } catch (e) {
+        document.getElementById('log-content').textContent = '获取日志失败';
+    }
+}
+
+function updateLastUpdateTime() {
+    // 可以加一个全局最后更新时间显示
+}

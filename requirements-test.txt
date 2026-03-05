@@ -1,0 +1,9 @@
+# 测试依赖
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-html>=4.0.0
+pytest-cov>=4.0.0  # 可选：覆盖率
+freezegun>=1.2.0  # 可选：时间冻结
+
+# 所有生产依赖（从 requirements.txt 继承）
+-r requirements.txt

@@ -33,13 +33,14 @@ class OKXWS:
         logger.info(f"连接到 OKX WS: {url} (symbol: {self.symbol})")
         self.connection = await websockets.connect(url)
         
-        # OKX 订阅：channel + instId
+        # OKX 订阅：channel + instId (+ optional instType for clarity)
         subscribe_msg = {
             "op": "subscribe",
             "args": [
                 {
                     "channel": "candle1m",
-                    "instId": self.symbol
+                    "instId": self.symbol,
+                    "instType": "SPOT"  # 明确指定为现货
                 }
             ]
         }

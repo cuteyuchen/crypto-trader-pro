@@ -1,6 +1,6 @@
 {
   "mode": "local",
-  "exchange": "binance",
+  "exchange": "okx",
   "initial_balance": 10000,
   "symbols": ["BTC/USDT"],
   "strategy": "ma_cross",

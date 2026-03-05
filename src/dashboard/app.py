@@ -5,7 +5,7 @@ from flask import Flask, jsonify, render_template, request, Response
 from flask_cors import CORS
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import datetime, date
 from subprocess import run, PIPE
 
 logger = logging.getLogger(__name__)
@@ -59,20 +59,29 @@ class Dashboard:
         # 从环境变量读取认证信息（默认 admin / admin123）
         self.auth_user = os.getenv('DASHBOARD_USER', 'admin')
         self.auth_pass = os.getenv('DASHBOARD_PASS', 'admin123')
-        
-        # 装饰器工厂
-        def auth_decorator(view_func):
-            return require_auth(self.auth_user, self.auth_pass)(view_func)
 
         @self.app.route('/')
-        @auth_decorator
         def index():
             """首页"""
-            return render_template('index.html')
+            return render_template('index_v2.html')
 
-        @self.app.route('/api/status')
-        @auth_decorator
-        def get_status():
+        @self.app.route('/api/balance')
+        def get_balance():
+            """获取账户余额"""
+            bot = self.trading_bot
+            if bot.db:
+                usdt = bot.db.get_balance("USDT")
+                return jsonify({'USDT': usdt})
+            else:
+                try:
+                    usdt = self._run_async(bot.executor.get_balance("USDT"))
+                    return jsonify({'USDT': usdt})
+                except Exception as e:
+                    logger.error(f"获取余额失败: {e}")
+                    return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/positions')
+        def get_positions():
             """获取当前持仓"""
             bot = self.trading_bot
             symbol = bot.strategy_config['symbol']
@@ -118,6 +127,19 @@ class Dashboard:
                     logger.error(f"获取持仓失败: {e}")
                     return jsonify({'error': str(e)}), 500
 
+        @self.app.route('/api/status')
+        def get_status():
+            """获取系统状态"""
+            bot = self.trading_bot
+            status = {
+                'mode': bot.mode_config.get('mode', 'unknown'),
+                'running': bot.running,
+                'strategy': bot.strategy_config.get('name', bot.strategy_config.get('type', 'unknown')),
+                'exchange': bot.mode_config.get('exchange', 'N/A'),
+                'symbol': bot.strategy_config.get('symbol', 'N/A')
+            }
+            return jsonify(status)
+
         @self.app.route('/api/trades')
         def get_trades():
             """获取最近交易记录"""
@@ -129,8 +151,8 @@ class Dashboard:
                 try:
                     conn.row_factory = sqlite3.Row
                     cur = conn.execute('''
-                        SELECT * FROM trades 
-                        ORDER BY executed_at DESC 
+                        SELECT * FROM trades
+                        ORDER BY executed_at DESC
                         LIMIT ?
                     ''', (limit,))
                     rows = cur.fetchall()
@@ -193,12 +215,157 @@ class Dashboard:
                     logger.error(f"获取日盈亏失败: {e}")
                     return jsonify({'date': today, 'total_pnl': 0.0})
 
+        # ---------- Trader 相关 API ----------
+
+        @self.app.route('/api/trades/active')
+        def get_active_trades():
+            """获取活跃订单列表"""
+            bot = self.trading_bot
+            if hasattr(bot, 'trader'):
+                orders = bot.trader.get_active_orders()
+                return jsonify(orders)
+            else:
+                return jsonify({'error': 'Trader 未初始化'}), 503
+
+        @self.app.route('/api/trades/history')
+        def get_trade_history():
+            """获取历史订单"""
+            bot = self.trading_bot
+            limit = int(request.args.get('limit', 100))
+            if hasattr(bot, 'trader'):
+                trades = bot.trader.get_order_history(limit=limit)
+                return jsonify(trades)
+            else:
+                return jsonify({'error': 'Trader 未初始化'}), 503
+
+        @self.app.route('/api/trader/control', methods=['POST'])
+        def control_trader():
+            """控制 Trader：start/stop/force_sell"""
+            bot = self.trading_bot
+            if not hasattr(bot, 'trader'):
+                return jsonify({'success': False, 'error': 'Trader 未初始化'}), 503
+
+            try:
+                req = request.get_json()
+                action = req.get('action')  # start|stop|pause|resume|force_sell
+                if action == 'start':
+                    if not bot.trader.is_running():
+                        bot.trader.start()
+                        return jsonify({'success': True, 'message': 'Trader 已启动'})
+                    else:
+                        return jsonify({'success': False, 'message': 'Trader 已在运行'})
+                elif action == 'stop':
+                    if bot.trader.is_running():
+                        bot.trader.stop()
+                        return jsonify({'success': True, 'message': 'Trader 已停止'})
+                    else:
+                        return jsonify({'success': False, 'message': 'Trader 未运行'})
+                elif action == 'pause':
+                    bot.trader.pause()
+                    return jsonify({'success': True, 'message': '自动交易已暂停'})
+                elif action == 'resume':
+                    bot.trader.resume()
+                    return jsonify({'success': True, 'message': '自动交易已恢复'})
+                elif action == 'force_sell':
+                    symbol = req.get('symbol')
+                    quantity = req.get('quantity')
+                    # 异步调用
+                    result = bot.trader._run_async(bot.trader.force_sell(symbol=symbol, quantity=quantity))
+                    if result:
+                        return jsonify({'success': True, 'message': '强制卖出已执行'})
+                    else:
+                        return jsonify({'success': False, 'message': '强制卖出失败'})
+                else:
+                    return jsonify({'success': False, 'error': f'未知操作: {action}'}), 400
+            except Exception as e:
+                logger.exception("Trader 控制异常")
+                return jsonify({'success': False, 'error': str(e)}), 500
+
+        @self.app.route('/api/trader/stats')
+        def get_trader_stats():
+            """获取 Trader 统计信息"""
+            bot = self.trading_bot
+            if hasattr(bot, 'trader'):
+                stats = bot.trader.get_stats()
+                return jsonify(stats)
+            else:
+                return jsonify({'error': 'Trader 未初始化'}), 503
+
+        @self.app.route('/api/trader/config', methods=['GET', 'POST'])
+        def handle_trader_config():
+            """获取或更新 Trader 配置（不包含策略相关）"""
+            bot = self.trading_bot
+            if not hasattr(bot, 'trader'):
+                return jsonify({'error': 'Trader 未初始化'}), 503
+
+            if request.method == 'GET':
+                # 返回当前 runtime 配置（从 trader.config 提取可热更新的部分）
+                cfg = {
+                    "auto_trade": bot.trader.auto_trade,
+                    "max_open_trades": bot.trader.max_open_trades,
+                    "stake_amount": bot.trader.stake_amount,
+                    "dry_run": bot.trader.dry_run
+                }
+                return jsonify(cfg)
+            else:
+                try:
+                    new_cfg = request.get_json()
+                    bot.trader.update_config(new_cfg)
+                    return jsonify({'success': True, 'message': '配置已更新'})
+                except Exception as e:
+                    logger.exception("Trader 配置更新失败")
+                    return jsonify({'success': False, 'error': str(e)}), 500
+
         @self.app.route('/api/strategy')
         def get_strategy_status():
             """获取策略状态"""
             bot = self.trading_bot
             status = bot.strategy_engine.get_status()
             return jsonify(status)
+
+        @self.app.route('/api/trader/status')
+        def get_trader_status():
+            """获取交易引擎状态"""
+            bot = self.trading_bot
+            status = bot.trader.get_status()
+            return jsonify(status)
+
+        @self.app.route('/api/trades/active')
+        def get_active_trades():
+            """获取活跃交易"""
+            bot = self.trading_bot
+            trades = bot.trader.get_open_trades()
+            return jsonify(trades)
+
+        @self.app.route('/api/trades/history')
+        def get_trade_history():
+            """获取历史交易"""
+            bot = self.trading_bot
+            limit = int(request.args.get('limit', 50))
+            trades = bot.trader.get_closed_trades(limit)
+            return jsonify(trades)
+
+        @self.app.route('/api/trader/control', methods=['POST'])
+        def control_trader():
+            """控制交易引擎（start/stop/toggle）"""
+            bot = self.trading_bot
+            req = request.get_json()
+            action = req.get('action')
+            if action == 'toggle':
+                if bot.trader.running:
+                    bot.trader.stop()
+                    return jsonify({'success': True, 'message': '已停止'})
+                else:
+                    # 重启需要启动 run 中的循环？这里简化：只改标志，实际需重启主循环
+                    return jsonify({'success': False, 'error': '请重启服务'})
+            elif action == 'stop':
+                bot.trader.stop()
+                return jsonify({'success': True, 'message': '已停止'})
+            elif action == 'start':
+                # 需要异步启动，这里简化
+                return jsonify({'success': False, 'error': '不支持动态启动，请重启服务'})
+            else:
+                return jsonify({'success': False, 'error': '未知操作'})
 
         @self.app.route('/api/order', methods=['POST'])
         def place_order():

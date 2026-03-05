@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Trader Pro - Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #667eea; --bg: #f5f7fa; --card: #fff; --text: #333; --success: #10b981; --danger: #ef4444; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+        /* 侧边导航 */
+        .sidebar { width: 240px; background: #1a1a2e; color: #fff; padding: 20px 0; flex-shrink: 0; }
+        .sidebar h1 { font-size: 1.2rem; text-align: center; margin-bottom: 30px; }
+        .nav-item { display: block; padding: 12px 20px; color: #ccc; text-decoration: none; transition: 0.2s; }
+        .nav-item:hover, .nav-item.active { background: var(--primary); color: #fff; }
+        /* 主内容区 */
+        .main { flex: 1; padding: 20px; overflow-y: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .status-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: var(--card); padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .stat-label { color: #666; font-size: 0.9rem; }
+        .stat-value { font-size: 1.8rem; font-weight: bold; color: var(--primary); margin-top: 5px; }
+        .card { background: var(--card); padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .card h3 { color: var(--primary); margin-bottom: 15px; border-bottom: 2px solid var(--primary); padding-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8fafc; color: #666; font-weight: 600; }
+        .positive { color: var(--success); }
+        .negative { color: var(--danger); }
+        .btn { background: var(--primary); color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: 500; }
+        .btn:hover { opacity: 0.9; }
+        .btn-sm { padding: 4px 8px; font-size: 0.85rem; }
+        .btn-danger { background: var(--danger); }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; margin-bottom: 4px; font-size: 0.9rem; color: #666; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .chart-container { height: 300px; margin-top: 15px; }
+        .mobile-hide { display: block; }
+        @media (max-width: 768px) {
+            .sidebar { width: 60px; padding: 10px 0; }
+            .sidebar h1, .nav-item span { display: none; }
+            .nav-item::after { content: attr(data-icon); }
+            .main { padding: 10px; }
+            .status-bar { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边导航 -->
+    <nav class="sidebar">
+        <h1>🦀 CTR</h1>
+        <a href="#" class="nav-item active" data-page="dashboard" data-icon="📊"> <span>Dashboard</span></a>
+        <a href="#" class="nav-item" data-page="trades" data-icon="💱"> <span>交易</span></a>
+        <a href="#" class="nav-item" data-page="strategies" data-icon="🧠"> <span>策略</span></a>
+        <a href="#" class="nav-item" data-page="backtest" data-icon="📈"> <span>回测</span></a>
+        <a href="#" class="nav-item" data-page="settings" data-icon="⚙️"> <span>设置</span></a>
+        <a href="#" class="nav-item" data-page="logs" data-icon="📋"> <span>日志</span></a>
+    </nav>
+
+    <!-- 主内容 -->
+    <main class="main">
+        <div class="header">
+            <h2 id="page-title">Dashboard</h2>
+            <div>
+                <span id="mode-badge" class="btn btn-sm">local</span>
+                <button id="toggle-trader" class="btn btn-sm">停止</button>
+            </div>
+        </div>
+
+        <!-- Dashboard 页面 -->
+        <div id="dashboard" class="page">
+            <div class="status-bar">
+                <div class="stat-card">
+                    <div class="stat-label">余额 (USDT)</div>
+                    <div class="stat-value" id="bal">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">总盈亏</div>
+                    <div class="stat-value" id="total-pnl">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">活跃持仓</div>
+                    <div class="stat-value" id="open-positions">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">今日交易</div>
+                    <div class="stat-value" id="today-trades">0</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>余额走势</h3>
+                <div class="chart-container">
+                    <canvas id="balanceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>当前持仓</h3>
+                <table id="positions-table">
+                    <thead><tr><th>交易对</th><th>方向</th><th>数量</th><th>入场价</th><th>当前价</th><th>盈亏</th><th>操作</th></tr></thead>
+                    <tbody id="positions-body"></tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h3>最近交易</h3>
+                <table id="trades-table">
+                    <thead><tr><th>时间</th><th>交易对</th><th>方向</th><th>数量</th><th>价格</th><th>盈亏</th></tr></thead>
+                    <tbody id="trades-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 交易页面 -->
+        <div id="trades" class="page" style="display:none;">
+            <div class="card">
+                <h3>快速下单</h3>
+                <form id="order-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <div class="form-group">
+                        <label>交易对</label>
+                        <select id="order-symbol">
+                            <option value="BTC/USDT">BTC/USDT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>方向</label>
+                        <select id="order-side">
+                            <option value="buy">买入</option>
+                            <option value="sell">卖出</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" step="0.001" id="order-quantity" placeholder="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>类型</label>
+                        <select id="order-type">
+                            <option value="market">市价单</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: flex-end;">
+                        <button type="submit" class="btn" style="width:100%;">提交订单</button>
+                    </div>
+                </form>
+                <div id="order-result" style="margin-top:15px;"></div>
+            </div>
+
+            <div class="card">
+                <h3>活跃订单</h3>
+                <table id="active-orders-table">
+                    <thead><tr><th>ID</th><th>交易对</th><th>方向</th><th>数量</th><th>价格</th><th>状态</th><th>操作</th></tr></thead>
+                    <tbody id="active-orders-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 策略页面 -->
+        <div id="strategies" class="page" style="display:none;">
+            <div class="card">
+                <h3>策略列表</h3>
+                <div id="strategies-list" style="display: grid; gap: 15px;"></div>
+                <button class="btn" id="reload-strategies" style="margin-top:15px;">重载所有策略</button>
+            </div>
+        </div>
+
+        <!-- 回测页面 -->
+        <div id="backtest" class="page" style="display:none;">
+            <div class="card">
+                <h3>回测配置</h3>
+                <form id="backtest-form" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
+                    <div class="form-group">
+                        <label>策略</label>
+                        <select id="bt-strategy">
+                            <option value="ma_cross">MA 交叉</option>
+                            <option value="rsi">RSI</option>
+                            <option value="bollinger">布林带</option>
+                            <option value="macd">MACD</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>天数</label>
+                        <input type="number" id="bt-days" value="30" min="1" max="365">
+                    </div>
+                    <div class="form-group">
+                        <label>初始资金</label>
+                        <input type="number" id="bt-initial" value="10000">
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: flex-end;">
+                        <button type="submit" class="btn">开始回测</button>
+                    </div>
+                </form>
+                <div id="bt-result" style="margin-top: 20px;"></div>
+                <canvas id="bt-chart" class="chart-container" style="display:none;"></canvas>
+            </div>
+        </div>
+
+        <!-- 设置页面 -->
+        <div id="settings" class="page" style="display:none;">
+            <div class="card">
+                <h3>系统设置</h3>
+                <form id="settings-form" style="max-width: 600px;">
+                    <div class="form-group">
+                        <label>交易所</label>
+                        <select id="setting-exchange">
+                            <option value="okx">OKX</option>
+                            <option value="binance">Binance</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>通知启用</label>
+                        <select id="setting-notify">
+                            <option value="true">是</option>
+                            <option value="false">否</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>自动交易</label>
+                        <select id="setting-auto">
+                            <option value="true">启用</option>
+                            <option value="false">禁用</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>最大同时持仓数</label>
+                        <input type="number" id="setting-max-trades" value="3" min="1" max="10">
+                    </div>
+                    <button type="submit" class="btn">保存并应用</button>
+                </form>
+                <div id="settings-status" style="margin-top:10px;"></div>
+            </div>
+        </div>
+
+        <!-- 日志页面 -->
+        <div id="logs" class="page" style="display:none;">
+            <div class="card">
+                <h3>系统日志</h3>
+                <div id="log-content" style="background: #1a1a2e; color: #0f0; padding: 15px; border-radius: 6px; height: 500px; overflow-y: auto; font-family: monospace; white-space: pre-wrap;"></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/app_v2.js"></script>
+</body>
+</html>

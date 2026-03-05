@@ -6,5 +6,6 @@
   "strategy": "ma_cross",
   "update_interval_ms": 1000,
   "dashboard_enabled": true,
-  "notifications_enabled": true
+  "notifications_enabled": true,
+  "telegram_enabled": false
 }

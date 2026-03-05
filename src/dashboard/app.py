@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import threading
 from flask import Flask, jsonify, render_template, request, Response
 from flask_cors import CORS
 import logging
@@ -8,8 +9,16 @@ import sqlite3
 from datetime import datetime, date
 from subprocess import run, PIPE
 import time
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# 可选导入 GridOptimizer（避免强制依赖）
+try:
+    from src.backtest.grid_search import GridOptimizer, OptimizationJob
+    GRID_SEARCH_AVAILABLE = True
+except ImportError:
+    GRID_SEARCH_AVAILABLE = False
 
 
 class Dashboard:
@@ -35,6 +44,9 @@ class Dashboard:
 
         # 配置日志文件输出
         self._setup_file_logging()
+
+        # 优化任务管理器（延迟导入，避免循环依赖）
+        self.optimization_manager = None
 
         # 全局请求前验证（除了静态文件）
         @self.app.before_request
@@ -612,6 +624,139 @@ class Dashboard:
                     else:
                         time.sleep(0.5)
             return Response(generate(), mimetype='text/event-stream')
+
+        # ========== 网格搜索优化 API ==========
+
+        # 全局优化器注册表（job_id -> optimizer 实例）
+        _active_optimizers = {}
+        _optimizers_lock = threading.RLock()
+
+        def _get_optimizer_state_dir():
+            """获取优化任务状态存储目录"""
+            return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'optimization_jobs')
+
+        @self.app.route('/api/backtest/optimize', methods=['POST'])
+        def start_optimization():
+            """启动参数优化任务（网格搜索）"""
+            if not GRID_SEARCH_AVAILABLE:
+                return jsonify({'success': False, 'error': '网格搜索模块未就绪'}), 500
+
+            req = request.get_json()
+            strategy_config = req.get('strategy_config')
+            param_ranges = req.get('param_ranges')
+            sort_metric = req.get('sort_metric', 'sharpe_ratio')
+
+            if not strategy_config or not param_ranges:
+                return jsonify({'success': False, 'error': '缺少 strategy_config 或 param_ranges'}), 400
+
+            try:
+                # 简化：使用 MockBacktestEngine（实际应替换为真实引擎）
+                from src.backtest.grid_search import MockBacktestEngine
+                backtest_engine = MockBacktestEngine()  # TODO: 集成真实 BacktestEngine
+
+                optimizer = GridOptimizer(
+                    strategy_config_template=strategy_config,
+                    param_ranges=param_ranges,
+                    backtest_engine=backtest_engine,
+                    sort_metric=sort_metric,
+                    state_dir=_get_optimizer_state_dir()
+                )
+
+                job_id = optimizer.start_async()
+                with _optimizers_lock:
+                    _active_optimizers[job_id] = optimizer
+
+                # 获取初始状态
+                job = optimizer.get_job_status(job_id)
+                return jsonify({
+                    'success': True,
+                    'job_id': job_id,
+                    'status': job.status,
+                    'total_combinations': job.total_combinations,
+                    'completed': job.completed,
+                    'progress_percent': job.completed / job.total_combinations * 100 if job.total_combinations > 0 else 0,
+                    'best_result': job.best_result,
+                    'logs': job.logs[-50:],
+                    'start_time': job.start_time,
+                    'end_time': job.end_time
+                })
+            except Exception as e:
+                logger.exception("启动优化失败")
+                return jsonify({'success': False, 'error': str(e)}), 500
+
+        @self.app.route('/api/backtest/optimize/status/<job_id>')
+        def get_optimization_status(job_id):
+            """查询优化任务状态"""
+            # 优先从内存获取
+            with _optimizers_lock:
+                optimizer = _active_optimizers.get(job_id)
+            if optimizer:
+                job = optimizer.get_job_status(job_id)
+            else:
+                # 从文件加载
+                state_file = os.path.join(_get_optimizer_state_dir(), f"{job_id}.json")
+                if os.path.exists(state_file):
+                    job = OptimizationJob.load(Path(state_file))
+                else:
+                    return jsonify({'success': False, 'error': '任务不存在'}), 404
+
+            return jsonify({
+                'success': True,
+                'job_id': job.job_id,
+                'status': job.status,
+                'total_combinations': job.total_combinations,
+                'completed': job.completed,
+                'progress_percent': job.completed / job.total_combinations * 100 if job.total_combinations > 0 else 0,
+                'best_result': job.best_result,
+                'logs': job.logs[-100:],
+                'start_time': job.start_time,
+                'end_time': job.end_time,
+                'error_message': job.error_message
+            })
+
+        @self.app.route('/api/backtest/optimize/cancel/<job_id>', methods=['POST'])
+        def cancel_optimization(job_id):
+            """取消优化任务"""
+            with _optimizers_lock:
+                optimizer = _active_optimizers.get(job_id)
+            if optimizer:
+                optimizer.stop()
+                with _optimizers_lock:
+                    _active_optimizers.pop(job_id, None)
+                # 更新状态文件
+                state_file = os.path.join(_get_optimizer_state_dir(), f"{job_id}.json")
+                if os.path.exists(state_file):
+                    job = OptimizationJob.load(Path(state_file))
+                    job.status = 'cancelled'
+                    job.end_time = datetime.now().isoformat()
+                    job.save(Path(state_file))
+                return jsonify({'success': True, 'message': '任务已取消'})
+            else:
+                return jsonify({'success': False, 'error': '任务不存在或已在内存中清理'}), 404
+
+        @self.app.route('/api/backtest/optimize/list')
+        def list_optimization_jobs():
+            """列出所有优化任务"""
+            state_dir = Path(_get_optimizer_state_dir())
+            if not state_dir.exists():
+                return jsonify({'total': 0, 'jobs': []})
+
+            jobs = []
+            for filepath in sorted(state_dir.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:20]:
+                try:
+                    job = OptimizationJob.load(filepath)
+                    jobs.append({
+                        'job_id': job.job_id,
+                        'status': job.status,
+                        'total_combinations': job.total_combinations,
+                        'completed': job.completed,
+                        'start_time': job.start_time,
+                        'end_time': job.end_time,
+                        'has_best': job.best_result is not None
+                    })
+                except Exception as e:
+                    logger.warning(f"加载任务状态失败 {filepath}: {e}")
+            return jsonify({'total': len(jobs), 'jobs': jobs})
 
         @self.app.route('/health')
         def health():

@@ -699,6 +699,219 @@ async function loadStrategies() {
     }
 }
 
+// ============ 参数网格搜索功能 ============
+let currentOptimizeJobId = null;
+let optimizePolling = null;
+
+// 初始化参数优化页面
+function initOptimizePage() {
+    const addBtn = document.getElementById('add-param-btn');
+    const paramsContainer = document.getElementById('params-container');
+    const startBtn = document.getElementById('start-optimize-btn');
+
+    // 添加参数行
+    addBtn?.addEventListener('click', () => {
+        const row = document.createElement('div');
+        row.className = 'param-row';
+        row.innerHTML = `
+            <input type="text" class="param-name" placeholder="参数名 (如: fast_period)" style="padding:6px;border:1px solid #ddd;border-radius:4px;">
+            <input type="number" class="param-min" placeholder="min" style="padding:6px;border:1px solid #ddd;border-radius:4px;">
+            <input type="number" class="param-max" placeholder="max" style="padding:6px;border:1px solid #ddd;border-radius:4px;">
+            <input type="number" class="param-step" placeholder="step" style="padding:6px;border:1px solid #ddd;border-radius:4px;">
+            <button type="button" class="remove-param btn btn-sm btn-danger" style="padding:4px 8px;">×</button>
+        `;
+        paramsContainer.appendChild(row);
+        // 绑定删除事件
+        row.querySelector('.remove-param').addEventListener('click', () => row.remove());
+    });
+
+    // 开始优化
+    startBtn?.addEventListener('click', async () => {
+        const strategy = document.getElementById('opt-strategy').value;
+        const days = parseInt(document.getElementById('opt-days').value);
+        const initial = parseFloat(document.getElementById('opt-initial').value);
+        const direction = document.getElementById('opt-direction').value;
+
+        // 收集参数范围
+        const paramRows = document.querySelectorAll('.param-row');
+        const paramRanges = {};
+        paramRows.forEach(row => {
+            const name = row.querySelector('.param-name').value.trim();
+            const min = parseFloat(row.querySelector('.param-min').value);
+            const max = parseFloat(row.querySelector('.param-max').value);
+            const step = parseFloat(row.querySelector('.param-step').value);
+            if (name && !isNaN(min) && !isNaN(max) && !isNaN(step)) {
+                paramRanges[name] = { min, max, step };
+            }
+        });
+
+        if (Object.keys(paramRanges).length === 0) {
+            alert('请至少添加一个参数范围');
+            return;
+        }
+
+        try {
+            startBtn.disabled = true;
+            startBtn.textContent = '优化运行中...';
+            document.getElementById('optimize-waiting').style.display = 'none';
+            document.getElementById('optimize-progress').style.display = 'block';
+            document.getElementById('no-results').style.display = 'block';
+            document.getElementById('results-table').style.display = 'none';
+
+            // 启动优化任务
+            const res = await fetch(`${API_BASE}/api/backtest/optimize`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    strategy,
+                    days,
+                    initial_balance: initial,
+                    param_ranges: paramRanges,
+                    optimize_direction: direction
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || '启动优化失败');
+            }
+            currentOptimizeJobId = data.job_id;
+            // 开始轮询进度
+            startOptimizePolling();
+        } catch (e) {
+            alert('优化启动失败: ' + e.message);
+            startBtn.disabled = false;
+            startBtn.textContent = '开始参数优化';
+        }
+    });
+}
+
+// 轮询优化进度
+function startOptimizePolling() {
+    if (optimizePolling) clearInterval(optimizePolling);
+    optimizePolling = setInterval(async () => {
+        if (!currentOptimizeJobId) return;
+        try {
+            const res = await fetch(`${API_BASE}/api/backtest/optimize/status/${currentOptimizeJobId}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || '查询失败');
+
+            // 更新进度条
+            const progress = data.progress || 0;
+            document.getElementById('progress-bar').style.width = `${progress * 100}%`;
+            document.getElementById('progress-text').textContent = `${Math.round(progress * 100)}%`;
+            document.getElementById('progress-count').textContent = `${data.completed || 0} / ${data.total_combinations || 0}`;
+
+            // 更新日志
+            const logDiv = document.getElementById('optimize-log');
+            if (data.logs) {
+                logDiv.innerHTML = data.logs.map(l => `<div class="log-entry log-${l.level || 'info'}">${l.message}</div>`).join('');
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+
+            // 如果完成，显示结果
+            if (data.status === 'completed' && data.best_result) {
+                clearInterval(optimizePolling);
+                showOptimizeResults(data.best_result, data.all_results);
+                currentOptimizeJobId = null;
+            } else if (data.status === 'failed') {
+                clearInterval(optimizePolling);
+                alert('优化失败: ' + (data.error || '未知错误'));
+                currentOptimizeJobId = null;
+            }
+        } catch (e) {
+            console.error('轮询优化进度失败:', e);
+        }
+    }, 2000);
+}
+
+// 显示优化结果
+function showOptimizeResults(best, all) {
+    document.getElementById('no-results').style.display = 'none';
+    document.getElementById('results-table').style.display = 'table';
+    document.getElementById('export-csv-btn').style.display = 'inline-block';
+
+    const tbody = document.getElementById('results-body');
+    tbody.innerHTML = '';
+
+    // 显示最佳结果（第一行）
+    const bestRow = document.createElement('tr');
+    bestRow.style.background = '#e8f5e9';
+    bestRow.innerHTML = `
+        <td><strong>最佳组合</strong><br><small>${JSON.stringify(best.params)}</small></td>
+        <td class="${best.sharpe >= 0 ? 'positive' : 'negative'}">${best.sharpe?.toFixed(3) || '-'}</td>
+        <td class="${best.return_pct >= 0 ? 'positive' : 'negative'}">${best.return_pct?.toFixed(2)}%</td>
+        <td class="negative">${best.max_drawdown_pct?.toFixed(2)}%</td>
+    `;
+    tbody.appendChild(bestRow);
+
+    // 可选：显示其他结果（限制前 10 行）
+    if (all && all.length > 1) {
+        const other = all.slice(1, 11);
+        other.forEach(item => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><small>${JSON.stringify(item.params)}</small></td>
+                <td class="${item.sharpe >= 0 ? 'positive' : 'negative'}">${item.sharpe?.toFixed(3)}</td>
+                <td class="${item.return_pct >= 0 ? 'positive' : 'negative'}">${item.return_pct?.toFixed(2)}%</td>
+                <td class="negative">${item.max_drawdown_pct?.toFixed(2)}%</td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    // 导出 CSV
+    document.getElementById('export-csv-btn').onclick = () => {
+        const csv = 'params,sharpe,return_pct,max_drawdown_pct\n' +
+            [best, ...(all || [])].map(item =>
+                `"${JSON.stringify(item.params)}",${item.sharpe},${item.return_pct},${item.max_drawdown_pct}`
+            ).join('\n');
+        const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `optimize_${strategy}_${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+}
+
+// ============ 日志流功能 ============
+function connectLogStream() {
+    const logDiv = document.getElementById('log-content');
+    if (!logDiv) return;
+    try {
+        const evtSource = new EventSource(`${API_BASE}/api/logs/stream`);
+        evtSource.onmessage = (event) => {
+            const line = event.data;
+            logDiv.textContent += line + '\n';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        };
+        evtSource.onerror = (e) => {
+            console.error('日志流断开，3秒后重连...', e);
+            setTimeout(connectLogStream, 3000);
+        };
+    } catch (e) {
+        console.error('日志流连接失败:', e);
+    }
+}
+
+// ============ 页面初始化 ============
+document.addEventListener('DOMContentLoaded', function() {
+    // 标签页切换
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            this.classList.add('active');
+            const tabId = this.getAttribute('data-tab');
+            document.getElementById(tabId).style.display = 'block';
+        });
+    });
+
+    initOptimizePage();
+});
+
 async function fetchLogs() {
     try {
         const res = await fetch(`${API_BASE}/api/logs?lines=200`);
@@ -707,6 +920,10 @@ async function fetchLogs() {
     } catch (e) {
         document.getElementById('log-content').textContent = '获取日志失败';
     }
+}
+
+function updateLastUpdateTime() {
+    document.getElementById('last-update').textContent = new Date().toLocaleString('zh-CN');
 }
 
 function updateLastUpdateTime() {
